@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DmDs</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main>
+    <nav class="top-nav">
+      <div class="brand">DmDs</div>
+      <div class="nav-actions">
+        <button class="btn tertiary" id="homeBtn">Home</button>
+        <button class="btn tertiary" id="emailGenBtn">Email Generator</button>
+        <button class="btn tertiary" id="sendEmailBtn">Send Email</button>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div>
+        <h1>DmDs</h1>
+        <p>Track, search, and manage extracted names by company</p>
+      </div>
+      <div class="hero-badge" id="lastUpdated">Updated just now</div>
+    </section>
+
+    <section class="applied-tabs">
+      <button class="tab-btn active" id="notAppliedTabBtn" data-applied-tab="not-applied">
+        Not Applied
+      </button>
+      <button class="tab-btn" id="appliedTabBtn" data-applied-tab="applied">
+        Applied
+      </button>
+    </section>
+
+    <section class="toolbar">
+      <input id="searchInput" type="search" placeholder="Search company or name...">
+      <select id="sortSelect" aria-label="Sort companies">
+        <option value="company-asc">Sort: Company A-Z</option>
+        <option value="company-desc">Sort: Company Z-A</option>
+        <option value="names-desc">Sort: Most names first</option>
+        <option value="names-asc">Sort: Least names first</option>
+      </select>
+      <button class="btn secondary" id="copyAllBtn">Copy All</button>
+      <button class="btn secondary" id="exportAllBtn">Export All CSV</button>
+      <button class="btn danger" id="clearAllBtn">Clear All</button>
+    </section>
+
+    <section class="toolbar toolbar-secondary">
+      <button class="btn tertiary" id="selectVisibleBtn">Select Visible</button>
+      <button class="btn tertiary" id="clearSelectionBtn">Clear Selection</button>
+      <button class="btn tertiary" id="toggleAllNamesBtn">Show All Names</button>
+      <button class="btn tertiary" id="copySelectedBtn">Copy Selected</button>
+      <button class="btn tertiary" id="exportSelectedBtn">Export Selected CSV</button>
+      <button class="btn danger" id="deleteSelectedBtn">Delete Selected</button>
+      <button class="btn tertiary" id="exportJsonBtn">Export JSON Backup</button>
+      <label class="file-btn">
+        Import JSON
+        <input id="importJsonInput" type="file" accept=".json,application/json">
+      </label>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-label">Companies</div>
+        <div class="stat-value" id="companiesCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Total Names</div>
+        <div class="stat-value" id="namesCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Unique Names</div>
+        <div class="stat-value" id="uniqueNamesCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Selected Companies</div>
+        <div class="stat-value" id="selectedCompaniesCount">0</div>
+      </article>
+    </section>
+
+    <div id="dashboard" class="cards"></div>
+  </main>
+  <script src="dashboard.js"></script>
+</body>
+</html>

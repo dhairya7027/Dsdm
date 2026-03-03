@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Name Extractor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>LinkedIn Name Extractor</h1>
+  <p>Enter company, paste LinkedIn search results, and save names.</p>
+
+  <input id="companyName" type="text" placeholder="Company name (required)">
+
+  <textarea id="inputText" placeholder="Paste LinkedIn results here..."></textarea>
+
+  <div class="actions">
+    <button class="btn" id="extractBtn">Extract Names</button>
+    <button class="btn" id="copyBtn">Copy</button>
+    <button class="btn download" id="downloadBtn" hidden>Download CSV</button>
+    <button class="btn dashboard" id="dashboardBtn">Open Dashboard</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

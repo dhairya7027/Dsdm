@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Name Extractor",
+  "description": "Paste LinkedIn search results and extract names instantly.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "LinkedIn Name Extractor",
+    "default_popup": "popup.html"
+  }
+}

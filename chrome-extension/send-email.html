@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Send Email</title>
+  <link rel="stylesheet" href="send-email.css">
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main>
+    <section class="hero">
+      <div>
+        <h1>Send Email</h1>
+        <p>Use generated emails to open Gmail drafts</p>
+      </div>
+      <button class="btn tertiary" id="backBtn">Back To Dashboard</button>
+    </section>
+
+    <section class="panel">
+      <div class="field">
+        <label for="companySelect">Company</label>
+        <select id="companySelect"></select>
+      </div>
+      <div class="field">
+        <label for="formatFilterSelect">Show format</label>
+        <select id="formatFilterSelect"></select>
+      </div>
+      <div class="field">
+        <label for="gmailAccountSelect">Gmail account</label>
+        <select id="gmailAccountSelect">
+          <option value="current">Current account</option>
+          <option value="0">Account 1</option>
+          <option value="1">Account 2</option>
+          <option value="2">Account 3</option>
+          <option value="3">Account 4</option>
+          <option value="4">Account 5</option>
+          <option value="5">Account 6</option>
+          <option value="6">Account 7</option>
+          <option value="7">Account 8</option>
+          <option value="8">Account 9</option>
+          <option value="9">Account 10</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="recipientMode">Recipient field</label>
+        <select id="recipientMode">
+          <option value="bcc">BCC</option>
+          <option value="to">To</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="batchSize">Batch size</label>
+        <input id="batchSize" type="number" min="1" max="100" value="100">
+      </div>
+      <div class="field field-wide">
+        <label for="subjectInput">Subject</label>
+        <input id="subjectInput" type="text" placeholder="Quick intro">
+      </div>
+      <div class="field field-wide">
+        <label for="bodyInput">Body</label>
+        <textarea id="bodyInput" rows="5" placeholder="Hi there,&#10;&#10;..."></textarea>
+      </div>
+      <div class="field">
+        <label for="templateSelect">Template</label>
+        <select id="templateSelect">
+          <option value="">Custom (no template)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="templateNameInput">Template name</label>
+        <input id="templateNameInput" type="text" placeholder="Flipkart outreach">
+      </div>
+      <div class="actions field-wide">
+        <button class="btn tertiary" id="saveTemplateBtn">Save Template</button>
+        <button class="btn tertiary" id="updateTemplateBtn">Update Template</button>
+        <button class="btn tertiary" id="deleteTemplateBtn">Delete Template</button>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button class="btn tertiary" id="copyBtn">Copy Emails</button>
+      <button class="btn tertiary" id="exportBtn">Export CSV</button>
+      <button class="btn secondary" id="openDraftsBtn">Open Gmail Draft(s)</button>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-label">Selected Company Emails</div>
+        <div class="stat-value" id="emailCount">0</div>
+      </article>
+    </section>
+
+    <section class="output">
+      <div class="output-header">
+        <h2>Emails</h2>
+        <span id="statusNote">No emails available.</span>
+      </div>
+      <div id="emailList" class="email-list"></div>
+    </section>
+  </main>
+
+  <script src="send-email.js"></script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Generator</title>
+  <link rel="stylesheet" href="email-generator.css">
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main>
+    <section class="hero">
+      <div>
+        <h1>Email Generator</h1>
+        <p>Generate email patterns for a selected company</p>
+      </div>
+      <button class="btn tertiary" id="backBtn">Back to Dashboard</button>
+    </section>
+
+    <section class="panel">
+      <div class="field">
+        <label for="companySelect">Company</label>
+        <select id="companySelect"></select>
+      </div>
+      <div class="field">
+        <label for="domainInput">Email domain</label>
+        <input id="domainInput" type="text" placeholder="company.com">
+      </div>
+      <div class="field">
+        <label for="formatSelect">Format</label>
+        <select id="formatSelect">
+          <option value="first.last">first.last@company.com</option>
+          <option value="firstlast">firstlast@company.com</option>
+          <option value="first">first@company.com</option>
+          <option value="last">last@company.com</option>
+          <option value="flast">flast@company.com (first initial + last)</option>
+          <option value="lfirst">lfirst@company.com (last initial + first)</option>
+          <option value="last.firsti">last.firsti@company.com (lastname.firstname initial)</option>
+          <option value="first.lasti">first.lasti@company.com (firstname.lastname initial)</option>
+          <option value="firstl">firstl@company.com (firstname + last initial)</option>
+          <option value="lastf">lastf@company.com (lastname + first initial)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="caseSelect">Case</label>
+        <select id="caseSelect">
+          <option value="lower">lowercase</option>
+          <option value="original">original</option>
+        </select>
+      </div>
+      <button class="btn secondary" id="generateBtn">Generate Emails</button>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-label">Generated</div>
+        <div class="stat-value" id="generatedCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Skipped</div>
+        <div class="stat-value" id="skippedCount">0</div>
+      </article>
+    </section>
+
+    <section class="actions">
+      <button class="btn tertiary" id="copyBtn">Copy All</button>
+      <button class="btn tertiary" id="exportBtn">Export CSV</button>
+      <button class="btn secondary" id="openSendEmailBtn">Go To Send Email</button>
+    </section>
+
+    <section class="output">
+      <div class="output-header">
+        <h2>Emails</h2>
+        <span id="outputNote">No emails generated yet.</span>
+      </div>
+      <div id="emailList" class="email-list"></div>
+    </section>
+  </main>
+
+  <script src="email-generator.js"></script>
+</body>
+</html>
