@@ -1,10 +1,19 @@
 let companiesState = {};
 let generatedEmailsState = {};
 let appliedCompaniesState = {};
+let companyDomainsState = {};
 let selectedCompanies = new Set();
 let lastRendered = [];
 let allNamesVisible = false;
 let appliedTab = "not-applied";
+let selectedDomain = "software";
+const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
+const DOMAIN_LABELS = {
+  software: "Software",
+  quant: "Quant",
+  marketing: "Marketing",
+  electrical: "Electrical"
+};
 
 function normalizeNames(value) {
   const seen = new Set();
@@ -53,6 +62,20 @@ function sanitizeAppliedCompanies(raw, companies) {
     }
   });
 
+  return cleaned;
+}
+
+function normalizeDomain(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return DOMAIN_ORDER.includes(key) ? key : "software";
+}
+
+function sanitizeCompanyDomains(raw, companies) {
+  const cleaned = {};
+  Object.keys(companies).forEach((company) => {
+    const incoming = raw && typeof raw === "object" ? raw[company] : null;
+    cleaned[company] = normalizeDomain(incoming);
+  });
   return cleaned;
 }
 
@@ -139,6 +162,18 @@ function pruneAppliedCompanies() {
   appliedCompaniesState = sanitizeAppliedCompanies(appliedCompaniesState, companiesState);
 }
 
+function pruneCompanyDomains() {
+  companyDomainsState = sanitizeCompanyDomains(companyDomainsState, companiesState);
+}
+
+function getCompanyDomain(company) {
+  return normalizeDomain(companyDomainsState[company]);
+}
+
+function setCompanyDomain(company, domain) {
+  companyDomainsState[company] = normalizeDomain(domain);
+}
+
 function createNamesContainer(names) {
   const namesContainer = document.createElement("div");
   namesContainer.className = "names";
@@ -193,6 +228,22 @@ function filterByAppliedTab(entries) {
   return entries.filter(([company]) => !isCompanyApplied(company));
 }
 
+function filterByDomain(entries) {
+  return entries.filter(([company]) => getCompanyDomain(company) === selectedDomain);
+}
+
+function updateDomainTabButtons() {
+  DOMAIN_ORDER.forEach((domain) => {
+    const button = document.querySelector(`[data-domain-tab="${domain}"]`);
+    if (!button) {
+      return;
+    }
+    const count = Object.keys(companiesState).filter((company) => getCompanyDomain(company) === domain).length;
+    button.classList.toggle("active", selectedDomain === domain);
+    button.textContent = `${DOMAIN_LABELS[domain]} (${count})`;
+  });
+}
+
 function updateAppliedTabButtons() {
   const notAppliedButton = document.getElementById("notAppliedTabBtn");
   const appliedButton = document.getElementById("appliedTabBtn");
@@ -200,8 +251,10 @@ function updateAppliedTabButtons() {
     return;
   }
 
-  const totalCompanies = Object.keys(companiesState).length;
-  const appliedCount = Object.values(appliedCompaniesState).filter(Boolean).length;
+  const domainCompanies = Object.keys(companiesState)
+    .filter((company) => getCompanyDomain(company) === selectedDomain);
+  const totalCompanies = domainCompanies.length;
+  const appliedCount = domainCompanies.filter((company) => isCompanyApplied(company)).length;
   const notAppliedCount = Math.max(0, totalCompanies - appliedCount);
 
   notAppliedButton.classList.toggle("active", appliedTab === "not-applied");
@@ -227,16 +280,21 @@ function renderCompanies(companies) {
 
   sortEntries(entries, sortValue);
   const searched = filterEntries(entries, searchValue);
-  const filtered = filterByAppliedTab(searched);
+  const byDomain = filterByDomain(searched);
+  const filtered = filterByAppliedTab(byDomain);
   lastRendered = filtered;
 
   if (!filtered.length) {
-    const message = entries.length
-      ? (appliedTab === "applied"
-        ? "No applied companies match your search."
-        : "No not-applied companies match your search.")
-      : "No company data saved yet.";
+    const hasAnyDomainCompanies = entries.some(([company]) => getCompanyDomain(company) === selectedDomain);
+    const message = !entries.length
+      ? "No company data saved yet."
+      : (!hasAnyDomainCompanies
+        ? `No companies in ${DOMAIN_LABELS[selectedDomain]} yet.`
+        : (appliedTab === "applied"
+          ? "No applied companies match your search."
+          : "No not-applied companies match your search."));
     dashboard.innerHTML = `<div class="empty">${message}</div>`;
+    updateDomainTabButtons();
     updateAppliedTabButtons();
     return;
   }
@@ -296,6 +354,24 @@ function renderCompanies(companies) {
     selection.appendChild(checkbox);
     selection.appendChild(selectionText);
 
+    const domainSelection = document.createElement("label");
+    domainSelection.className = "selection";
+    const domainText = document.createElement("span");
+    domainText.textContent = "Domain";
+    const domainSelect = document.createElement("select");
+    domainSelect.className = "domain-select";
+    domainSelect.dataset.action = "set-company-domain";
+    domainSelect.dataset.company = company;
+    DOMAIN_ORDER.forEach((domain) => {
+      const option = document.createElement("option");
+      option.value = domain;
+      option.textContent = DOMAIN_LABELS[domain];
+      domainSelect.appendChild(option);
+    });
+    domainSelect.value = getCompanyDomain(company);
+    domainSelection.appendChild(domainText);
+    domainSelection.appendChild(domainSelect);
+
     const appliedSelection = document.createElement("label");
     appliedSelection.className = "selection";
     const appliedCheckbox = document.createElement("input");
@@ -311,13 +387,18 @@ function renderCompanies(companies) {
     top.appendChild(titleWrap);
     top.appendChild(actions);
 
+    const cardControls = document.createElement("div");
+    cardControls.className = "card-controls";
+    cardControls.appendChild(selection);
+    cardControls.appendChild(domainSelection);
+    cardControls.appendChild(appliedSelection);
+
     const namesContainer = createNamesContainer(names);
     namesContainer.dataset.namesVisible = allNamesVisible ? "true" : "false";
     namesContainer.classList.toggle("hidden", !allNamesVisible);
 
     card.appendChild(top);
-    card.appendChild(selection);
-    card.appendChild(appliedSelection);
+    card.appendChild(cardControls);
     card.appendChild(namesContainer);
 
     dashboard.appendChild(card);
@@ -326,6 +407,7 @@ function renderCompanies(companies) {
   });
 
   updateToggleAllNamesButton();
+  updateDomainTabButtons();
   updateAppliedTabButtons();
 }
 
@@ -333,7 +415,8 @@ async function persistCompanies() {
   await chrome.storage.local.set({
     companies: companiesState,
     generatedEmails: generatedEmailsState,
-    appliedCompanies: appliedCompaniesState
+    appliedCompanies: appliedCompaniesState,
+    companyDomains: companyDomainsState
   });
 }
 
@@ -443,9 +526,11 @@ async function handleCompanyAction(targetButton) {
     } else {
       delete appliedCompaniesState[newName];
     }
+    companyDomainsState[newName] = getCompanyDomain(company);
     delete companiesState[company];
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
+    delete companyDomainsState[company];
     if (selectedCompanies.has(company)) {
       selectedCompanies.delete(company);
       selectedCompanies.add(newName);
@@ -465,6 +550,7 @@ async function handleCompanyAction(targetButton) {
     delete companiesState[company];
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
+    delete companyDomainsState[company];
     selectedCompanies.delete(company);
     await persistCompanies();
     updateStats(companiesState);
@@ -559,11 +645,13 @@ async function importJsonBackup(file) {
     companiesState = incoming;
     pruneGeneratedEmails();
     pruneAppliedCompanies();
+    pruneCompanyDomains();
     selectedCompanies = new Set();
   } else {
     mergeCompanies(companiesState, incoming);
     pruneGeneratedEmails();
     pruneAppliedCompanies();
+    pruneCompanyDomains();
   }
 
   await persistCompanies();
@@ -580,6 +668,7 @@ async function clearAllData() {
   companiesState = {};
   generatedEmailsState = {};
   appliedCompaniesState = {};
+  companyDomainsState = {};
   selectedCompanies = new Set();
   await persistCompanies();
   updateStats(companiesState);
@@ -620,6 +709,7 @@ async function deleteSelected() {
     delete companiesState[company];
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
+    delete companyDomainsState[company];
   });
   selectedCompanies = new Set();
   await persistCompanies();
@@ -633,7 +723,8 @@ async function initDashboard() {
     "companies",
     "generatedEmails",
     "appliedCompanies",
-    "appliedNames"
+    "appliedNames",
+    "companyDomains"
   ]);
   const originalCompanies = data.companies || {};
   companiesState = sanitizeCompanies(originalCompanies);
@@ -654,12 +745,15 @@ async function initDashboard() {
     { ...migratedAppliedCompanies, ...(data.appliedCompanies || {}) },
     companiesState
   );
+  companyDomainsState = sanitizeCompanyDomains(data.companyDomains || {}, companiesState);
   pruneGeneratedEmails();
   pruneAppliedCompanies();
+  pruneCompanyDomains();
 
   if (
     JSON.stringify(originalCompanies) !== JSON.stringify(companiesState) ||
-    JSON.stringify(data.appliedCompanies || {}) !== JSON.stringify(appliedCompaniesState)
+    JSON.stringify(data.appliedCompanies || {}) !== JSON.stringify(appliedCompaniesState) ||
+    JSON.stringify(data.companyDomains || {}) !== JSON.stringify(companyDomainsState)
   ) {
     await persistCompanies();
   }
@@ -674,6 +768,17 @@ async function initDashboard() {
 
   document.getElementById("sortSelect").addEventListener("change", () => {
     renderCompanies(companiesState);
+  });
+
+  document.querySelectorAll("[data-domain-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextDomain = normalizeDomain(button.dataset.domainTab);
+      if (!nextDomain || nextDomain === selectedDomain) {
+        return;
+      }
+      selectedDomain = nextDomain;
+      renderCompanies(companiesState);
+    });
   });
 
   document.querySelectorAll("[data-applied-tab]").forEach((button) => {
@@ -712,6 +817,18 @@ async function initDashboard() {
   });
 
   document.getElementById("dashboard").addEventListener("change", async (event) => {
+    const domainSelect = event.target.closest("select[data-action='set-company-domain']");
+    if (domainSelect) {
+      const company = domainSelect.dataset.company;
+      if (company) {
+        setCompanyDomain(company, domainSelect.value);
+        await persistCompanies();
+        renderCompanies(companiesState);
+        updateLastUpdated();
+      }
+      return;
+    }
+
     const appliedCheck = event.target.closest("input[data-action='mark-company-applied']");
     if (appliedCheck) {
       const company = appliedCheck.dataset.company;

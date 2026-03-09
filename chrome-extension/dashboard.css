@@ -139,6 +139,18 @@ main {
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.14);
 }
 
+.domain-tabs {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.14);
+}
+
 .tab-btn {
   border: 1px solid transparent;
   border-radius: 10px;
@@ -172,7 +184,8 @@ main {
 }
 
 .toolbar-secondary {
-  grid-template-columns: repeat(7, auto);
+  display: flex;
+  flex-wrap: wrap;
   justify-content: flex-start;
 }
 
@@ -369,15 +382,32 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.card-controls {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
 
 .selection input {
   accent-color: var(--accent);
   width: 16px;
   height: 16px;
+}
+
+.domain-select {
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 0 8px;
 }
 
 .names {

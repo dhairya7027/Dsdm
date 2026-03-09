@@ -15,7 +15,9 @@ const FORMAT_LABELS = {
   "last.firsti": "last.firsti@company.com",
   "first.lasti": "first.lasti@company.com",
   firstl: "firstl@company.com",
-  lastf: "lastf@company.com"
+  lastf: "lastf@company.com",
+  "f.last": "f.last@company.com",
+  "l.first": "l.first@company.com"
 };
 
 function uniqueEmails(emails) {

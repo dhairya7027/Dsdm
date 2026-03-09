@@ -64,6 +64,10 @@ function formatEmail(vars, format, domain, caseMode) {
     local = `${first}${l}`;
   } else if (format === "lastf") {
     local = `${last}${f}`;
+  } else if (format === "f.last") {
+    local = `${f}.${last}`;
+  } else if (format === "l.first") {
+    local = `${l}.${first}`;
   } else if (format === "lfirst") {
     local = `${l}${first}`;
   } else {
