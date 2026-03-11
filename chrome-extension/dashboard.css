@@ -10,6 +10,14 @@
   --glow: rgba(99, 102, 241, 0.22);
 }
 
+body.dark-mode {
+  --bg: #0b1220;
+  --ink: #e2e8f0;
+  --muted: #93a4bf;
+  --card: #0f172a;
+  --border: rgba(148, 163, 184, 0.24);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -73,6 +81,10 @@ main {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 32px rgba(37, 99, 235, 0.12);
+}
+body.dark-mode .top-nav {
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.5);
 }
 
 .brand {
@@ -199,6 +211,11 @@ main {
   background: rgba(255, 255, 255, 0.75);
   box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
 }
+body.dark-mode #searchInput,
+body.dark-mode #sortSelect {
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--ink);
+}
 
 .btn {
   height: 42px;
@@ -230,6 +247,11 @@ main {
   color: #1d4ed8;
   border: 1px solid rgba(37, 99, 235, 0.2);
 }
+body.dark-mode .tertiary {
+  background: linear-gradient(135deg, #13213c, #0f1c33);
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.25);
+}
 
 .danger {
   background: linear-gradient(135deg, #f43f5e, #e11d48);
@@ -252,6 +274,10 @@ main {
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+body.dark-mode .file-btn {
+  background: linear-gradient(135deg, #13213c, #0f1c33);
+  color: #cbd5e1;
+}
 
 .file-btn input {
   display: none;
@@ -272,6 +298,10 @@ main {
   border: 1px solid var(--border);
   box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
   animation: fadeUp 0.6s ease;
+}
+body.dark-mode .stat-card {
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
 }
 
 .stat-label {
@@ -302,6 +332,10 @@ main {
   box-shadow: 0 20px 36px rgba(37, 99, 235, 0.11);
   animation: fadeUp 0.6s ease;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+body.dark-mode .card {
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: 0 20px 36px rgba(2, 6, 23, 0.45);
 }
 
 .card:hover {
@@ -363,6 +397,10 @@ main {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   cursor: pointer;
+}
+body.dark-mode .mini-btn {
+  background: linear-gradient(135deg, #1d2b47, #13213b);
+  color: #93c5fd;
 }
 
 .mini-btn:hover {
@@ -426,6 +464,11 @@ main {
   font-size: 12px;
   line-height: 1.2;
 }
+body.dark-mode .name-pill {
+  background: linear-gradient(135deg, #0f2747, #1a1f3f);
+  color: #bfdbfe;
+  border-color: rgba(147, 197, 253, 0.3);
+}
 
 .hidden {
   display: none;
@@ -437,6 +480,9 @@ main {
   border-radius: 16px;
   padding: 18px;
   color: var(--muted);
+}
+body.dark-mode .empty {
+  background: rgba(15, 23, 42, 0.82);
 }
 
 @keyframes fadeUp {

@@ -7,6 +7,7 @@ let lastRendered = [];
 let allNamesVisible = false;
 let appliedTab = "not-applied";
 let selectedDomain = "software";
+let themeMode = "light";
 const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
 const DOMAIN_LABELS = {
   software: "Software",
@@ -111,6 +112,21 @@ function updateStats(companies) {
 function updateLastUpdated() {
   const stamp = new Date().toLocaleString();
   document.getElementById("lastUpdated").textContent = `Updated ${stamp}`;
+}
+
+function applyThemeMode() {
+  const isDark = themeMode === "dark";
+  document.body.classList.toggle("dark-mode", isDark);
+  const button = document.getElementById("themeToggleBtn");
+  if (button) {
+    button.textContent = isDark ? "Light Mode" : "Dark Mode";
+  }
+}
+
+async function toggleThemeMode() {
+  themeMode = themeMode === "dark" ? "light" : "dark";
+  applyThemeMode();
+  await chrome.storage.local.set({ themeMode });
 }
 
 function sortEntries(entries, sortValue) {
@@ -724,7 +740,8 @@ async function initDashboard() {
     "generatedEmails",
     "appliedCompanies",
     "appliedNames",
-    "companyDomains"
+    "companyDomains",
+    "themeMode"
   ]);
   const originalCompanies = data.companies || {};
   companiesState = sanitizeCompanies(originalCompanies);
@@ -746,6 +763,7 @@ async function initDashboard() {
     companiesState
   );
   companyDomainsState = sanitizeCompanyDomains(data.companyDomains || {}, companiesState);
+  themeMode = data.themeMode === "dark" ? "dark" : "light";
   pruneGeneratedEmails();
   pruneAppliedCompanies();
   pruneCompanyDomains();
@@ -759,6 +777,7 @@ async function initDashboard() {
   }
 
   updateStats(companiesState);
+  applyThemeMode();
   renderCompanies(companiesState);
   updateLastUpdated();
 
@@ -899,10 +918,15 @@ async function initDashboard() {
     const url = chrome.runtime.getURL("send-email.html");
     window.open(url);
   });
+  document.getElementById("emailCleanupBtn").addEventListener("click", () => {
+    const url = chrome.runtime.getURL("email-cleanup.html");
+    window.open(url);
+  });
 
   document.getElementById("homeBtn").addEventListener("click", () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
+  document.getElementById("themeToggleBtn").addEventListener("click", toggleThemeMode);
 }
 
 initDashboard();

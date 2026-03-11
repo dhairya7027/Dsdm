@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Cleanup</title>
+  <link rel="stylesheet" href="email-cleanup.css">
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main>
+    <section class="hero">
+      <div>
+        <h1>Email Cleanup</h1>
+        <p>Paste Gmail bounce text and remove invalid emails for a company</p>
+      </div>
+      <button class="btn tertiary" id="backBtn">Back To Dashboard</button>
+    </section>
+
+    <section class="panel">
+      <div class="field">
+        <label for="companySelect">Company</label>
+        <select id="companySelect"></select>
+      </div>
+      <div class="field field-wide">
+        <label for="bounceInput">Bounce text</label>
+        <textarea id="bounceInput" rows="14" placeholder="Paste Mail Delivery Subsystem messages here..."></textarea>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button class="btn tertiary" id="parseBtn">Extract Invalid Emails</button>
+      <button class="btn secondary" id="removeBtn">Remove From Company</button>
+      <button class="btn tertiary" id="copyBtn">Copy Extracted</button>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-label">Extracted Invalid</div>
+        <div class="stat-value" id="invalidCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Removed</div>
+        <div class="stat-value" id="removedCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Not Found</div>
+        <div class="stat-value" id="notFoundCount">0</div>
+      </article>
+      <article class="stat-card">
+        <div class="stat-label">Remaining</div>
+        <div class="stat-value" id="remainingCount">0</div>
+      </article>
+    </section>
+
+    <section class="output">
+      <div class="output-header">
+        <h2>Extracted Invalid Emails</h2>
+        <span id="statusNote">Paste bounce text, then extract.</span>
+      </div>
+      <div id="emailList" class="email-list"></div>
+    </section>
+  </main>
+
+  <script src="email-cleanup.js"></script>
+</body>
+</html>
