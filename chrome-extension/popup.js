@@ -85,6 +85,55 @@ function uniqueNames(names) {
   return result;
 }
 
+function extractNameFromLine(line) {
+  const patterns = [
+    /^(.+?)\s*•\s*(?:1st|2nd|3rd)\b/i,
+    /^(.+?)\s*[-|]\s*(?:1st|2nd|3rd)\b/i,
+    /^(.+?)\s+(?:1st|2nd|3rd)\s+degree\b/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return "";
+}
+
+function looksLikeStandaloneName(line) {
+  if (!line) {
+    return false;
+  }
+  if (/\b(1st|2nd|3rd|connection|follower)\b/i.test(line)) {
+    return false;
+  }
+  return /^[A-Za-z][A-Za-z\s'-]+$/.test(line);
+}
+
+function extractCandidates(lines) {
+  const names = [];
+
+  lines.forEach((line, index) => {
+    const inlineName = extractNameFromLine(line);
+    if (inlineName) {
+      names.push(inlineName);
+      return;
+    }
+
+    // Some copied LinkedIn layouts split name and connection degree across two lines.
+    if (/\b(1st|2nd|3rd)\b/i.test(line) && index > 0) {
+      const previous = lines[index - 1];
+      if (looksLikeStandaloneName(previous)) {
+        names.push(previous);
+      }
+    }
+  });
+
+  return names;
+}
+
 function normalizeCompanyName(value) {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -148,21 +197,9 @@ async function extractNames() {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  let names = [];
-
-  lines.forEach((line) => {
-    const match = line.match(/^(.+?)\s*•\s*(1st|2nd|3rd)/);
-    if (match) {
-      const rawName = match[1];
-      if (hasDotOrEmoji(rawName)) {
-        return;
-      }
-      const name = sanitizeName(rawName);
-      if (name.length > 2) {
-        names.push(name);
-      }
-    }
-  });
+  let names = extractCandidates(lines).filter((rawName) => {
+    return !hasDotOrEmoji(rawName);
+  }).map((rawName) => sanitizeName(rawName)).filter((name) => name.length > 2);
 
   names = uniqueNames(names);
   extractedNames = names;
