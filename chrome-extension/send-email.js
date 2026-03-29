@@ -4,9 +4,11 @@ let gmailComposeSettings = {};
 let emailTemplatesState = [];
 let emailTemplateSettings = {};
 let currentEmails = [];
+let appliedCompaniesState = {};
 
 const FORMAT_LABELS = {
   "first.last": "first.last@company.com",
+  first_last: "first_last@company.com",
   firstlast: "firstlast@company.com",
   first: "first@company.com",
   last: "last@company.com",
@@ -227,7 +229,9 @@ function getCompaniesWithEmails() {
       all.add(company);
     }
   });
-  return [...all].sort((a, b) => a.localeCompare(b));
+  return [...all]
+    .filter((company) => appliedCompaniesState[company] !== true)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function renderCompanyOptions() {
@@ -409,13 +413,15 @@ async function init() {
     "generatedEmailsByFormat",
     "gmailComposeSettings",
     "emailTemplates",
-    "emailTemplateSettings"
+    "emailTemplateSettings",
+    "appliedCompanies"
   ]);
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
   gmailComposeSettings = data.gmailComposeSettings || { account: "current" };
   emailTemplatesState = sanitizeTemplates(data.emailTemplates || []);
   emailTemplateSettings = data.emailTemplateSettings || { selectedTemplateId: "" };
+  appliedCompaniesState = data.appliedCompanies || {};
 
   renderCompanyOptions();
   const company = getSelectedCompany();

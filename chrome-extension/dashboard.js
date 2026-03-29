@@ -2,12 +2,14 @@ let companiesState = {};
 let generatedEmailsState = {};
 let appliedCompaniesState = {};
 let companyDomainsState = {};
+let applicationLogState = [];
 let selectedCompanies = new Set();
 let lastRendered = [];
 let allNamesVisible = false;
 let appliedTab = "not-applied";
 let selectedDomain = "software";
 let themeMode = "light";
+let dailyAppliedStats = { date: "", count: 0 };
 const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
 const DOMAIN_LABELS = {
   software: "Software",
@@ -80,6 +82,28 @@ function sanitizeCompanyDomains(raw, companies) {
   return cleaned;
 }
 
+function sanitizeApplicationLog(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const company = String(entry.company || "").trim();
+      const dateKey = String(entry.dateKey || "").trim();
+      const timestamp = String(entry.timestamp || "").trim();
+      const action = String(entry.action || "").trim().toLowerCase();
+      if (!company || !dateKey || !timestamp || action !== "applied") {
+        return null;
+      }
+      return { company, dateKey, timestamp, action: "applied" };
+    })
+    .filter(Boolean);
+}
+
 function escapeCSV(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
@@ -107,6 +131,7 @@ function updateStats(companies) {
   document.getElementById("namesCount").textContent = String(names.length);
   document.getElementById("uniqueNamesCount").textContent = String(uniqueNames.size);
   document.getElementById("selectedCompaniesCount").textContent = String(selectedCompanies.size);
+  document.getElementById("dailyAppliedCount").textContent = String(dailyAppliedStats.count || 0);
 }
 
 function updateLastUpdated() {
@@ -127,6 +152,58 @@ async function toggleThemeMode() {
   themeMode = themeMode === "dark" ? "light" : "dark";
   applyThemeMode();
   await chrome.storage.local.set({ themeMode });
+}
+
+
+function getTodayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function ensureDailyAppliedStats() {
+  const today = getTodayKey();
+  if (!dailyAppliedStats || dailyAppliedStats.date !== today) {
+    dailyAppliedStats = { date: today, count: 0 };
+    return true;
+  }
+  if (!Number.isFinite(dailyAppliedStats.count) || dailyAppliedStats.count < 0) {
+    dailyAppliedStats.count = 0;
+    return true;
+  }
+  return false;
+}
+
+function appendApplicationLog(company) {
+  const now = new Date();
+  applicationLogState.push({
+    company,
+    dateKey: getTodayKey(),
+    timestamp: now.toISOString(),
+    action: "applied"
+  });
+}
+
+function removeLatestApplicationLogForCompany(company) {
+  let latestIndex = -1;
+  let latestTime = -1;
+
+  applicationLogState.forEach((entry, index) => {
+    if (entry.company !== company || entry.action !== "applied") {
+      return;
+    }
+    const time = new Date(entry.timestamp).getTime();
+    if (Number.isFinite(time) && time > latestTime) {
+      latestTime = time;
+      latestIndex = index;
+    }
+  });
+
+  if (latestIndex >= 0) {
+    applicationLogState.splice(latestIndex, 1);
+  }
 }
 
 function sortEntries(entries, sortValue) {
@@ -338,12 +415,16 @@ function renderCompanies(companies) {
     const title = document.createElement("h2");
     title.className = "company-title";
     title.textContent = company;
+    const ratioBadge = document.createElement("span");
+    ratioBadge.className = "ratio-badge";
     const meta = document.createElement("div");
     meta.className = "meta";
     const savedEmails = normalizeEmails(generatedEmailsState[company]);
+    ratioBadge.textContent = `${savedEmails.length}/${names.length}`;
     const appliedStatus = isCompanyApplied(company) ? "Applied" : "Not Applied";
     meta.textContent = `${names.length} name(s) | ${appliedStatus} | ${savedEmails.length} saved email(s)`;
     titleWrap.appendChild(title);
+    titleWrap.appendChild(ratioBadge);
     titleWrap.appendChild(meta);
 
     const actions = document.createElement("div");
@@ -428,11 +509,14 @@ function renderCompanies(companies) {
 }
 
 async function persistCompanies() {
+  ensureDailyAppliedStats();
   await chrome.storage.local.set({
     companies: companiesState,
     generatedEmails: generatedEmailsState,
     appliedCompanies: appliedCompaniesState,
-    companyDomains: companyDomainsState
+    companyDomains: companyDomainsState,
+    dailyAppliedStats,
+    applicationLog: applicationLogState
   });
 }
 
@@ -741,7 +825,9 @@ async function initDashboard() {
     "appliedCompanies",
     "appliedNames",
     "companyDomains",
-    "themeMode"
+    "themeMode",
+    "dailyAppliedStats",
+    "applicationLog"
   ]);
   const originalCompanies = data.companies || {};
   companiesState = sanitizeCompanies(originalCompanies);
@@ -763,7 +849,10 @@ async function initDashboard() {
     companiesState
   );
   companyDomainsState = sanitizeCompanyDomains(data.companyDomains || {}, companiesState);
+  applicationLogState = sanitizeApplicationLog(data.applicationLog || []);
   themeMode = data.themeMode === "dark" ? "dark" : "light";
+  dailyAppliedStats = data.dailyAppliedStats || { date: "", count: 0 };
+  const dailyStatsChanged = ensureDailyAppliedStats();
   pruneGeneratedEmails();
   pruneAppliedCompanies();
   pruneCompanyDomains();
@@ -771,7 +860,9 @@ async function initDashboard() {
   if (
     JSON.stringify(originalCompanies) !== JSON.stringify(companiesState) ||
     JSON.stringify(data.appliedCompanies || {}) !== JSON.stringify(appliedCompaniesState) ||
-    JSON.stringify(data.companyDomains || {}) !== JSON.stringify(companyDomainsState)
+    JSON.stringify(data.companyDomains || {}) !== JSON.stringify(companyDomainsState) ||
+    JSON.stringify(data.applicationLog || []) !== JSON.stringify(applicationLogState) ||
+    dailyStatsChanged
   ) {
     await persistCompanies();
   }
@@ -852,8 +943,19 @@ async function initDashboard() {
     if (appliedCheck) {
       const company = appliedCheck.dataset.company;
       if (company) {
+        const wasApplied = isCompanyApplied(company);
         setCompanyApplied(company, appliedCheck.checked);
+        if (appliedCheck.checked && !wasApplied) {
+          ensureDailyAppliedStats();
+          dailyAppliedStats.count += 1;
+          appendApplicationLog(company);
+        } else if (!appliedCheck.checked && wasApplied) {
+          ensureDailyAppliedStats();
+          dailyAppliedStats.count = Math.max(0, (dailyAppliedStats.count || 0) - 1);
+          removeLatestApplicationLogForCompany(company);
+        }
         await persistCompanies();
+        updateStats(companiesState);
         renderCompanies(companiesState);
         updateLastUpdated();
       }
@@ -920,6 +1022,10 @@ async function initDashboard() {
   });
   document.getElementById("emailCleanupBtn").addEventListener("click", () => {
     const url = chrome.runtime.getURL("email-cleanup.html");
+    window.open(url);
+  });
+  document.getElementById("statsPageBtn").addEventListener("click", () => {
+    const url = chrome.runtime.getURL("stats.html");
     window.open(url);
   });
 

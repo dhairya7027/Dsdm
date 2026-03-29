@@ -3,6 +3,7 @@ let companyDomains = {};
 let currentEmails = [];
 let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
+let appliedCompaniesState = {};
 
 function uniqueEmails(emails) {
   const seen = new Set();
@@ -48,6 +49,8 @@ function formatEmail(vars, format, domain, caseMode) {
   let local;
   if (format === "first.last") {
     local = `${first}.${last}`;
+  } else if (format === "first_last") {
+    local = `${first}_${last}`;
   } else if (format === "firstlast") {
     local = `${first}${last}`;
   } else if (format === "first") {
@@ -104,12 +107,14 @@ function renderEmailList(emails) {
 function loadCompanyOptions() {
   const select = document.getElementById("companySelect");
   select.innerHTML = "";
-  const companies = Object.keys(companiesState).sort((a, b) => a.localeCompare(b));
+  const companies = Object.keys(companiesState)
+    .filter((company) => appliedCompaniesState[company] !== true)
+    .sort((a, b) => a.localeCompare(b));
 
   if (!companies.length) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "No companies saved";
+    option.textContent = "No non-applied companies available";
     select.appendChild(option);
     select.disabled = true;
     return;
@@ -240,12 +245,14 @@ async function init() {
     "companies",
     "companyDomains",
     "generatedEmails",
-    "generatedEmailsByFormat"
+    "generatedEmailsByFormat",
+    "appliedCompanies"
   ]);
   companiesState = data.companies || {};
   companyDomains = data.companyDomains || {};
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
+  appliedCompaniesState = data.appliedCompanies || {};
 
   loadCompanyOptions();
   const company = getSelectedCompany();
