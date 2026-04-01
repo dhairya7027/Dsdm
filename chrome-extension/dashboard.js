@@ -420,7 +420,8 @@ function renderCompanies(companies) {
     const meta = document.createElement("div");
     meta.className = "meta";
     const savedEmails = normalizeEmails(generatedEmailsState[company]);
-    ratioBadge.textContent = `${savedEmails.length}/${names.length}`;
+    const percent = names.length ? Math.round((savedEmails.length / names.length) * 100) : 0;
+    ratioBadge.textContent = `${savedEmails.length}/${names.length} • ${percent}%`;
     const appliedStatus = isCompanyApplied(company) ? "Applied" : "Not Applied";
     meta.textContent = `${names.length} name(s) | ${appliedStatus} | ${savedEmails.length} saved email(s)`;
     titleWrap.appendChild(title);
