@@ -351,7 +351,7 @@ function filterByAppliedTab(entries) {
     return entries.filter(([company]) => isCompanyApplied(company) && isCompanyCleanupDone(company));
   }
   if (appliedTab === "applied") {
-    return entries.filter(([company]) => isCompanyApplied(company));
+    return entries.filter(([company]) => isCompanyApplied(company) && !isCompanyCleanupDone(company));
   }
   return entries.filter(([company]) => !isCompanyApplied(company));
 }
@@ -382,12 +382,13 @@ function updateAppliedTabButtons() {
 
   const domainCompanies = Object.keys(companiesState)
     .filter((company) => getCompanyDomain(company) === selectedDomain);
-  const totalCompanies = domainCompanies.length;
-  const appliedCount = domainCompanies.filter((company) => isCompanyApplied(company)).length;
+  const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company)).length;
+  const appliedCount = domainCompanies.filter((company) => {
+    return isCompanyApplied(company) && !isCompanyCleanupDone(company);
+  }).length;
   const appliedCleanupCount = domainCompanies.filter((company) => {
     return isCompanyApplied(company) && isCompanyCleanupDone(company);
   }).length;
-  const notAppliedCount = Math.max(0, totalCompanies - appliedCount);
 
   notAppliedButton.classList.toggle("active", appliedTab === "not-applied");
   appliedButton.classList.toggle("active", appliedTab === "applied");
