@@ -6,6 +6,10 @@ let emailTemplateSettings = {};
 let currentEmails = [];
 let appliedCompaniesState = {};
 
+function applyThemeMode(themeMode) {
+  document.body.classList.toggle("dark-mode", themeMode === "dark");
+}
+
 const FORMAT_LABELS = {
   "first.last": "first.last@company.com",
   first_last: "first_last@company.com",
@@ -414,7 +418,8 @@ async function init() {
     "gmailComposeSettings",
     "emailTemplates",
     "emailTemplateSettings",
-    "appliedCompanies"
+    "appliedCompanies",
+    "themeMode"
   ]);
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
@@ -422,6 +427,7 @@ async function init() {
   emailTemplatesState = sanitizeTemplates(data.emailTemplates || []);
   emailTemplateSettings = data.emailTemplateSettings || { selectedTemplateId: "" };
   appliedCompaniesState = data.appliedCompanies || {};
+  applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
 
   renderCompanyOptions();
   const company = getSelectedCompany();

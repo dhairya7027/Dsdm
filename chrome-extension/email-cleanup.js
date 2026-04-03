@@ -2,6 +2,10 @@ let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
 let extractedInvalidEmails = [];
 
+function applyThemeMode(themeMode) {
+  document.body.classList.toggle("dark-mode", themeMode === "dark");
+}
+
 function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
@@ -174,9 +178,14 @@ async function copyExtractedEmails() {
 }
 
 async function init() {
-  const data = await chrome.storage.local.get(["generatedEmails", "generatedEmailsByFormat"]);
+  const data = await chrome.storage.local.get([
+    "generatedEmails",
+    "generatedEmailsByFormat",
+    "themeMode"
+  ]);
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
+  applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
   renderCompanyOptions();
   updateCounts(0, 0, 0, 0);
 

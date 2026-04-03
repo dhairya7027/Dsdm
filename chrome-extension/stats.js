@@ -7,6 +7,10 @@ const DOMAIN_LABELS = {
 let applicationLogState = [];
 let companyDomainsState = {};
 
+function applyThemeMode(themeMode) {
+  document.body.classList.toggle("dark-mode", themeMode === "dark");
+}
+
 function getTodayKey() {
   const now = new Date();
   const year = now.getFullYear();
@@ -183,9 +187,10 @@ function rerender() {
 }
 
 async function init() {
-  const data = await chrome.storage.local.get(["applicationLog", "companyDomains"]);
+  const data = await chrome.storage.local.get(["applicationLog", "companyDomains", "themeMode"]);
   applicationLogState = sanitizeApplicationLog(data.applicationLog || []);
   companyDomainsState = data.companyDomains || {};
+  applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
   rerender();
 
   document.getElementById("backBtn").addEventListener("click", () => {

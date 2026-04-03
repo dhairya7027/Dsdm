@@ -5,6 +5,10 @@ let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
 let appliedCompaniesState = {};
 
+function applyThemeMode(themeMode) {
+  document.body.classList.toggle("dark-mode", themeMode === "dark");
+}
+
 function uniqueEmails(emails) {
   const seen = new Set();
   const result = [];
@@ -246,13 +250,15 @@ async function init() {
     "companyDomains",
     "generatedEmails",
     "generatedEmailsByFormat",
-    "appliedCompanies"
+    "appliedCompanies",
+    "themeMode"
   ]);
   companiesState = data.companies || {};
   companyDomains = data.companyDomains || {};
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
   appliedCompaniesState = data.appliedCompanies || {};
+  applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
 
   loadCompanyOptions();
   const company = getSelectedCompany();

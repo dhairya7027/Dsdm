@@ -8,6 +8,13 @@
   --border: rgba(37, 99, 235, 0.18);
 }
 
+body.dark-mode {
+  --bg: #0b1220;
+  --ink: #e2e8f0;
+  --muted: #93a4bf;
+  --border: rgba(148, 163, 184, 0.24);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -157,6 +164,31 @@ main {
 .tertiary {
   background: linear-gradient(135deg, #ecfeff, #eff6ff);
   color: #1d4ed8;
+}
+
+body.dark-mode .panel,
+body.dark-mode .stat-card,
+body.dark-mode .output {
+  background: rgba(15, 23, 42, 0.86);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.45);
+}
+
+body.dark-mode .field input,
+body.dark-mode .field select,
+body.dark-mode .field textarea {
+  background: rgba(15, 23, 42, 0.94);
+  color: var(--ink);
+}
+
+body.dark-mode .tertiary {
+  background: linear-gradient(135deg, #13213c, #0f1c33);
+  color: #93c5fd;
+}
+
+body.dark-mode .email-row {
+  background: linear-gradient(135deg, #1b2a44, #16253d);
+  border-color: rgba(147, 197, 253, 0.25);
+  color: var(--ink);
 }
 
 .actions {
