@@ -157,10 +157,7 @@ async function removeInvalidForCompany() {
   });
   generatedEmailsByFormatState[company] = byFormat;
 
-  await chrome.storage.local.set({
-    generatedEmails: generatedEmailsState,
-    generatedEmailsByFormat: generatedEmailsByFormatState
-  });
+  await SharedApi.removeInvalidEmails(company, extractedInvalidEmails);
 
   const removedCount = removedEmails.length;
   const notFoundCount = extractedInvalidEmails.filter((email) => !existingSet.has(normalizeEmail(email))).length;
@@ -178,13 +175,19 @@ async function copyExtractedEmails() {
 }
 
 async function init() {
-  const data = await chrome.storage.local.get([
-    "generatedEmails",
-    "generatedEmailsByFormat",
-    "themeMode"
-  ]);
-  generatedEmailsState = data.generatedEmails || {};
-  generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
+  await SharedApi.ensureSignedIn();
+  const snapshot = await SharedApi.getSnapshot();
+  const data = await chrome.storage.local.get(["themeMode"]);
+  generatedEmailsState = {};
+  generatedEmailsByFormatState = {};
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
+    }
+    generatedEmailsState[company] = Array.isArray(item.generatedEmails) ? item.generatedEmails : [];
+    generatedEmailsByFormatState[company] = item.generatedEmailsByFormat || {};
+  });
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
   renderCompanyOptions();
   updateCounts(0, 0, 0, 0);

@@ -43,10 +43,11 @@ function sanitizeApplicationLog(raw) {
       const dateKey = String(entry.dateKey || "").trim();
       const timestamp = String(entry.timestamp || "").trim();
       const action = String(entry.action || "").trim().toLowerCase();
+      const username = String(entry.username || "").trim();
       if (!company || !dateKey || !timestamp || action !== "applied") {
         return null;
       }
-      return { company, dateKey, timestamp, action: "applied" };
+      return { company, dateKey, timestamp, action: "applied", username };
     })
     .filter(Boolean);
 }
@@ -156,7 +157,7 @@ function renderRecentTable(log, companyDomains) {
 
   if (!log.length) {
     const row = document.createElement("tr");
-    row.innerHTML = `<td class="empty" colspan="3">No apply events yet.</td>`;
+    row.innerHTML = `<td class="empty" colspan="4">No apply events yet.</td>`;
     body.appendChild(row);
     return;
   }
@@ -172,6 +173,7 @@ function renderRecentTable(log, companyDomains) {
     row.innerHTML = `
       <td>${new Date(entry.timestamp).toLocaleString()}</td>
       <td>${entry.company}</td>
+      <td>${entry.username || "-"}</td>
       <td>${domain}</td>
     `;
     body.appendChild(row);
@@ -187,11 +189,38 @@ function rerender() {
 }
 
 async function init() {
-  const data = await chrome.storage.local.get(["applicationLog", "companyDomains", "themeMode"]);
-  applicationLogState = sanitizeApplicationLog(data.applicationLog || []);
-  companyDomainsState = data.companyDomains || {};
+  await SharedApi.ensureSignedIn();
+  const snapshot = await SharedApi.getSnapshot();
+  const data = await chrome.storage.local.get(["themeMode"]);
+  applicationLogState = sanitizeApplicationLog(snapshot.applicationLog || []);
+  companyDomainsState = {};
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
+    }
+    companyDomainsState[company] = String(item.domain || "").toLowerCase();
+  });
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
   rerender();
+
+  setInterval(async () => {
+    try {
+      const next = await SharedApi.getSnapshot();
+      applicationLogState = sanitizeApplicationLog(next.applicationLog || []);
+      companyDomainsState = {};
+      (next.companies || []).forEach((item) => {
+        const company = String(item.company || "").trim();
+        if (!company) {
+          return;
+        }
+        companyDomainsState[company] = String(item.domain || "").toLowerCase();
+      });
+      rerender();
+    } catch {
+      // Ignore transient polling failures.
+    }
+  }, 3000);
 
   document.getElementById("backBtn").addEventListener("click", () => {
     const url = chrome.runtime.getURL("dashboard.html");

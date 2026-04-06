@@ -156,12 +156,7 @@ async function loadLastCompanyName() {
 }
 
 async function saveCompanyNames(company, names) {
-  const data = await chrome.storage.local.get("companies");
-  const companies = data.companies || {};
-  const existingNames = companies[company] || [];
-  const mergedNames = uniqueNames([...existingNames, ...names]);
-  companies[company] = mergedNames;
-  await chrome.storage.local.set({ companies });
+  await SharedApi.upsertCompanyNames(company, names, "software");
 }
 
 function renderResults(names, company) {
@@ -184,6 +179,7 @@ function renderResults(names, company) {
 }
 
 async function extractNames() {
+  await SharedApi.ensureSignedIn();
   const company = getCompanyName();
   if (!company) {
     alert("Enter a company name first.");
@@ -262,3 +258,11 @@ document.getElementById("companyName").addEventListener("blur", async () => {
 });
 
 loadLastCompanyName();
+
+(async () => {
+  try {
+    await SharedApi.ensureSignedIn();
+  } catch (error) {
+    alert(`Sign-in required: ${error.message}`);
+  }
+})();

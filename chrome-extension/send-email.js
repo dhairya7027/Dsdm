@@ -412,21 +412,31 @@ function exportEmails() {
 }
 
 async function init() {
+  await SharedApi.ensureSignedIn();
+  const snapshot = await SharedApi.getSnapshot();
   const data = await chrome.storage.local.get([
-    "generatedEmails",
-    "generatedEmailsByFormat",
     "gmailComposeSettings",
     "emailTemplates",
     "emailTemplateSettings",
-    "appliedCompanies",
     "themeMode"
   ]);
-  generatedEmailsState = data.generatedEmails || {};
-  generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
+  generatedEmailsState = {};
+  generatedEmailsByFormatState = {};
+  appliedCompaniesState = {};
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
+    }
+    generatedEmailsState[company] = Array.isArray(item.generatedEmails) ? item.generatedEmails : [];
+    generatedEmailsByFormatState[company] = item.generatedEmailsByFormat || {};
+    if (item.applied === true) {
+      appliedCompaniesState[company] = true;
+    }
+  });
   gmailComposeSettings = data.gmailComposeSettings || { account: "current" };
   emailTemplatesState = sanitizeTemplates(data.emailTemplates || []);
   emailTemplateSettings = data.emailTemplateSettings || { selectedTemplateId: "" };
-  appliedCompaniesState = data.appliedCompanies || {};
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
 
   renderCompanyOptions();

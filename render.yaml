@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: dsdm-shared-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/shared.db
+    disk:
+      name: dsdm-db
+      mountPath: /var/data
+      sizeGB: 1

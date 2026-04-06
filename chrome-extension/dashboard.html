@@ -14,103 +14,168 @@
   <main>
     <nav class="top-nav">
       <div class="brand">DmDs</div>
-      <div class="nav-actions">
-        <button class="btn tertiary" id="themeToggleBtn">Dark Mode</button>
-        <button class="btn tertiary" id="homeBtn">Home</button>
-        <button class="btn tertiary" id="emailGenBtn">Email Generator</button>
-        <button class="btn tertiary" id="sendEmailBtn">Send Email</button>
-        <button class="btn tertiary" id="emailCleanupBtn">Email Cleanup</button>
-        <button class="btn tertiary" id="statsPageBtn">Stats</button>
-      </div>
+      <button class="btn tertiary" id="themeToggleBtn">Dark Mode</button>
     </nav>
 
-    <section class="hero">
-      <div>
-        <h1>DmDs</h1>
-        <p>Track, search, and manage extracted names by company</p>
-      </div>
-      <div class="hero-badge" id="lastUpdated">Updated just now</div>
-    </section>
+    <div class="dashboard-layout">
+      <aside class="side-menu">
+        <section class="sidebar-panel">
+          <h2 class="panel-title">Team</h2>
+          <div class="menu-buttons">
+            <button class="btn tertiary app-btn" id="currentUserBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg></span><span id="currentUserLabel">User: -</span></button>
+            <button class="btn tertiary app-btn" id="addUserBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v10"/><path d="M7 12h10"/><circle cx="12" cy="12" r="9"/></svg></span><span>Add User</span></button>
+            <button class="btn tertiary app-btn" id="renameMeBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.5-1 9-9-3.5-3.5-9 9L4 20z"/><path d="m13.5 6.5 3.5 3.5"/></svg></span><span>Rename Me</span></button>
+            <button class="btn tertiary app-btn" id="logoutBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 8l5 4-5 4"/><path d="M20 12H9"/><path d="M9 20H5V4h4"/></svg></span><span>Logout</span></button>
+          </div>
+        </section>
 
-    <section class="domain-tabs">
-      <button class="tab-btn active" id="softwareDomainTabBtn" data-domain-tab="software">
-        Software
-      </button>
-      <button class="tab-btn" id="quantDomainTabBtn" data-domain-tab="quant">
-        Quant
-      </button>
-      <button class="tab-btn" id="marketingDomainTabBtn" data-domain-tab="marketing">
-        Marketing
-      </button>
-      <button class="tab-btn" id="electricalDomainTabBtn" data-domain-tab="electrical">
-        Electrical
-      </button>
-    </section>
+        <section class="sidebar-panel">
+          <h2 class="panel-title">Backend</h2>
+          <div class="backend-config">
+            <input id="apiBaseInput" type="text" placeholder="http://your-server:8787/api">
+            <div class="menu-buttons">
+              <button class="btn tertiary app-btn" id="testBackendBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span><span>Test URL</span></button>
+              <button class="btn tertiary app-btn" id="saveBackendBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14V7l-3-3H5z"/><path d="M8 20v-7h8v7"/><path d="M8 4h6v4H8z"/></svg></span><span>Save URL</span></button>
+            </div>
+            <div id="backendStatus" class="meta">Current backend: -</div>
+          </div>
+        </section>
 
-    <section class="applied-tabs">
-      <button class="tab-btn active" id="notAppliedTabBtn" data-applied-tab="not-applied">
-        Not Applied
-      </button>
-      <button class="tab-btn" id="appliedTabBtn" data-applied-tab="applied">
-        Applied
-      </button>
-      <button class="tab-btn" id="appliedCleanupTabBtn" data-applied-tab="applied-cleanup">
-        Applied + Cleanup
-      </button>
-    </section>
+        <section class="sidebar-panel">
+          <h2 class="panel-title">Navigate</h2>
+          <div class="menu-buttons">
+            <button class="btn tertiary app-btn app-btn-active" id="homeBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13V10.5"/><path d="M10 20v-5h4v5"/></svg></span><span>Home</span></button>
+            <button class="btn tertiary app-btn" id="emailGenBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M12 5h6"/><path d="M6 5h1"/><path d="m8 14 8-8 3 3-8 8-4 1z"/></svg></span><span>Email Generator</span></button>
+            <button class="btn tertiary app-btn" id="sendEmailBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="m22 2-11 11"/></svg></span><span>Send Email</span></button>
+            <button class="btn tertiary app-btn" id="emailCleanupBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span><span>Email Cleanup</span></button>
+            <button class="btn tertiary app-btn" id="statsPageBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 17V9"/><path d="M12 17V5"/><path d="M17 17v-6"/></svg></span><span>Stats</span></button>
+          </div>
+        </section>
 
-    <section class="toolbar">
-      <input id="searchInput" type="search" placeholder="Search company or name...">
-      <select id="sortSelect" aria-label="Sort companies">
-        <option value="company-asc">Sort: Company A-Z</option>
-        <option value="company-desc">Sort: Company Z-A</option>
-        <option value="names-desc">Sort: Most names first</option>
-        <option value="names-asc">Sort: Least names first</option>
-      </select>
-      <button class="btn secondary" id="copyAllBtn">Copy All</button>
-      <button class="btn secondary" id="exportAllBtn">Export All CSV</button>
-      <button class="btn danger" id="clearAllBtn">Clear All</button>
-    </section>
+        <section class="sidebar-panel">
+          <h2 class="panel-title">Selection</h2>
+          <div class="menu-buttons">
+            <button class="btn tertiary app-btn" id="selectVisibleBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5 11-11"/></svg></span><span>Select Visible</span></button>
+            <button class="btn tertiary app-btn" id="clearSelectionBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></svg></span><span>Clear Selection</span></button>
+            <button class="btn tertiary app-btn" id="toggleAllNamesBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg></span><span>Show All Names</span></button>
+          </div>
+        </section>
 
-    <section class="toolbar toolbar-secondary">
-      <button class="btn tertiary" id="selectVisibleBtn">Select Visible</button>
-      <button class="btn tertiary" id="clearSelectionBtn">Clear Selection</button>
-      <button class="btn tertiary" id="toggleAllNamesBtn">Show All Names</button>
-      <button class="btn tertiary" id="copySelectedBtn">Copy Selected</button>
-      <button class="btn tertiary" id="exportSelectedBtn">Export Selected CSV</button>
-      <button class="btn danger" id="deleteSelectedBtn">Delete Selected</button>
-      <button class="btn tertiary" id="exportJsonBtn">Export JSON Backup</button>
-      <label class="file-btn">
-        Import JSON
-        <input id="importJsonInput" type="file" accept=".json,application/json">
-      </label>
-    </section>
+        <section class="sidebar-panel">
+          <h2 class="panel-title">Export</h2>
+          <div class="menu-buttons">
+            <button class="btn tertiary app-btn" id="copySelectedBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><rect x="4" y="4" width="11" height="11" rx="2"/></svg></span><span>Copy Selected</span></button>
+            <button class="btn tertiary app-btn" id="exportSelectedBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M4 20h16"/></svg></span><span>Export Selected CSV</span></button>
+            <button class="btn tertiary app-btn" id="exportJsonBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5c-2 0-3 1-3 3v2c0 1-.5 1.5-1.5 2C5.5 12.5 6 13 6 14v2c0 2 1 3 3 3"/><path d="M15 5c2 0 3 1 3 3v2c0 1 .5 1.5 1.5 2-1 .5-1.5 1-1.5 2v2c0 2-1 3-3 3"/></svg></span><span>Export JSON Backup</span></button>
+            <label class="file-btn app-btn file-app-btn">
+              <span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V9"/><path d="m8 13 4-4 4 4"/><path d="M4 20h16"/></svg></span>
+              Import JSON
+              <input id="importJsonInput" type="file" accept=".json,application/json">
+            </label>
+          </div>
+        </section>
 
-    <section class="stats">
-      <article class="stat-card">
-        <div class="stat-label">Companies</div>
-        <div class="stat-value" id="companiesCount">0</div>
-      </article>
-      <article class="stat-card">
-        <div class="stat-label">Total Names</div>
-        <div class="stat-value" id="namesCount">0</div>
-      </article>
-      <article class="stat-card">
-        <div class="stat-label">Unique Names</div>
-        <div class="stat-value" id="uniqueNamesCount">0</div>
-      </article>
-      <article class="stat-card">
-        <div class="stat-label">Selected Companies</div>
-        <div class="stat-value" id="selectedCompaniesCount">0</div>
-      </article>
-      <article class="stat-card">
-        <div class="stat-label">Applied Today</div>
-        <div class="stat-value" id="dailyAppliedCount">0</div>
-      </article>
-    </section>
+        <section class="sidebar-panel danger-panel">
+          <h2 class="panel-title">Danger Zone</h2>
+          <div class="menu-buttons">
+            <button class="btn danger app-btn" id="deleteSelectedBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span><span>Delete Selected</span></button>
+            <button class="btn danger app-btn" id="clearAllBtn"><span class="app-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="m6 6 12 12"/></svg></span><span>Clear All</span></button>
+          </div>
+        </section>
+      </aside>
 
-    <div id="dashboard" class="cards"></div>
+      <section class="content-area">
+        <section class="hero">
+          <div>
+            <h1>DmDs</h1>
+            <p>Track, search, and manage extracted names by company</p>
+          </div>
+          <div class="hero-badge" id="lastUpdated">Updated just now</div>
+        </section>
+
+        <section class="tabs-row">
+          <section class="domain-tabs">
+            <button class="tab-btn active" id="softwareDomainTabBtn" data-domain-tab="software">
+              Software
+            </button>
+            <button class="tab-btn" id="quantDomainTabBtn" data-domain-tab="quant">
+              Quant
+            </button>
+            <button class="tab-btn" id="marketingDomainTabBtn" data-domain-tab="marketing">
+              Marketing
+            </button>
+            <button class="tab-btn" id="electricalDomainTabBtn" data-domain-tab="electrical">
+              Electrical
+            </button>
+          </section>
+
+          <section class="applied-tabs">
+            <button class="tab-btn active" id="notAppliedTabBtn" data-applied-tab="not-applied">
+              Not Applied
+            </button>
+            <button class="tab-btn" id="appliedTabBtn" data-applied-tab="applied">
+              Applied
+            </button>
+            <button class="tab-btn" id="appliedCleanupTabBtn" data-applied-tab="applied-cleanup">
+              Applied + Cleanup
+            </button>
+          </section>
+        </section>
+
+        <section class="controls-panel">
+          <div class="toolbar toolbar-primary">
+            <div class="control-block search-block">
+              <input id="searchInput" type="search" placeholder="Search company or name...">
+              <select id="sortSelect" aria-label="Sort companies">
+                <option value="company-asc">Sort: Company A-Z</option>
+                <option value="company-desc">Sort: Company Z-A</option>
+                <option value="names-desc">Sort: Most names first</option>
+                <option value="names-asc">Sort: Least names first</option>
+              </select>
+            </div>
+            <div class="control-block action-block">
+              <button class="btn secondary" id="copyAllBtn">Copy All</button>
+              <button class="btn secondary" id="exportAllBtn">Export All CSV</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="stats">
+          <article class="stat-card">
+            <div class="stat-label">Companies</div>
+            <div class="stat-value" id="companiesCount">0</div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-label">Total Names</div>
+            <div class="stat-value" id="namesCount">0</div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-label">Unique Names</div>
+            <div class="stat-value" id="uniqueNamesCount">0</div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-label">Selected Companies</div>
+            <div class="stat-value" id="selectedCompaniesCount">0</div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-label">Applied Today</div>
+            <div class="stat-value" id="dailyAppliedCount">0</div>
+          </article>
+        </section>
+
+        <section class="controls-panel">
+          <div class="output-header">
+            <h2>Applied By User</h2>
+            <span id="userStatsNote">Live leaderboard</span>
+          </div>
+          <div id="userStats" class="cards"></div>
+        </section>
+
+        <div id="dashboard" class="cards"></div>
+      </section>
+    </div>
   </main>
+  <script src="shared-api.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

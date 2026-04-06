@@ -4,6 +4,7 @@
   "description": "Paste LinkedIn search results and extract names instantly.",
   "version": "1.0.0",
   "permissions": ["storage"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "LinkedIn Name Extractor",
     "default_popup": "popup.html"

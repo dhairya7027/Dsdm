@@ -1,8 +1,6 @@
 let companiesState = {};
-let companyDomains = {};
+let emailDomains = {};
 let currentEmails = [];
-let generatedEmailsState = {};
-let generatedEmailsByFormatState = {};
 let appliedCompaniesState = {};
 
 function applyThemeMode(themeMode) {
@@ -18,11 +16,10 @@ function uniqueEmails(emails) {
       return;
     }
     const key = cleaned.toLowerCase();
-    if (seen.has(key)) {
-      return;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(cleaned);
     }
-    seen.add(key);
-    result.push(cleaned);
   });
   return result;
 }
@@ -93,12 +90,10 @@ function updateCounts(generated, skipped) {
 function renderEmailList(emails) {
   const list = document.getElementById("emailList");
   list.innerHTML = "";
-
   if (!emails.length) {
     document.getElementById("outputNote").textContent = "No emails generated yet.";
     return;
   }
-
   document.getElementById("outputNote").textContent = `Showing ${emails.length} emails`;
   emails.forEach((email) => {
     const row = document.createElement("div");
@@ -134,24 +129,11 @@ function loadCompanyOptions() {
 }
 
 function getSelectedCompany() {
-  const select = document.getElementById("companySelect");
-  return select.value;
-}
-
-async function persistDomains() {
-  await chrome.storage.local.set({ companyDomains });
-}
-
-async function persistGeneratedEmails() {
-  await chrome.storage.local.set({
-    generatedEmails: generatedEmailsState,
-    generatedEmailsByFormat: generatedEmailsByFormatState
-  });
+  return document.getElementById("companySelect").value;
 }
 
 function setDomainForCompany(company) {
-  const domainInput = document.getElementById("domainInput");
-  domainInput.value = companyDomains[company] || "";
+  document.getElementById("domainInput").value = emailDomains[company] || "";
 }
 
 function handleCompanyChange() {
@@ -167,12 +149,8 @@ async function handleDomainChange() {
   if (!company) {
     return;
   }
-  if (domain) {
-    companyDomains[company] = domain;
-  } else {
-    delete companyDomains[company];
-  }
-  await persistDomains();
+  emailDomains[company] = domain;
+  await chrome.storage.local.set({ emailDomainsByCompany: emailDomains });
 }
 
 async function generateEmails() {
@@ -185,19 +163,14 @@ async function generateEmails() {
     alert("Select a company first.");
     return;
   }
-
   if (!domain) {
     alert("Enter a domain (example: company.com).");
     return;
   }
 
-  companyDomains[company] = domain;
-  await persistDomains();
-
   const names = companiesState[company] || [];
   const emails = [];
   let skipped = 0;
-
   names.forEach((name) => {
     const vars = parseName(name);
     if (!vars) {
@@ -207,17 +180,10 @@ async function generateEmails() {
     emails.push(formatEmail(vars, format, domain, caseMode));
   });
 
-  currentEmails = emails;
-  updateCounts(emails.length, skipped);
-  renderEmailList(emails);
-
-  const existing = generatedEmailsState[company] || [];
-  generatedEmailsState[company] = uniqueEmails([...existing, ...emails]);
-  const byFormat = generatedEmailsByFormatState[company] || {};
-  const existingForFormat = byFormat[format] || [];
-  byFormat[format] = uniqueEmails([...existingForFormat, ...emails]);
-  generatedEmailsByFormatState[company] = byFormat;
-  await persistGeneratedEmails();
+  currentEmails = uniqueEmails(emails);
+  updateCounts(currentEmails.length, skipped);
+  renderEmailList(currentEmails);
+  await SharedApi.saveCompanyEmails(company, currentEmails, format);
 }
 
 async function copyEmails() {
@@ -244,21 +210,30 @@ function exportEmails() {
   URL.revokeObjectURL(url);
 }
 
+function applySnapshot(snapshot) {
+  const companies = {};
+  const applied = {};
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
+    }
+    companies[company] = Array.isArray(item.names) ? item.names : [];
+    if (item.applied === true) {
+      applied[company] = true;
+    }
+  });
+  companiesState = companies;
+  appliedCompaniesState = applied;
+}
+
 async function init() {
-  const data = await chrome.storage.local.get([
-    "companies",
-    "companyDomains",
-    "generatedEmails",
-    "generatedEmailsByFormat",
-    "appliedCompanies",
-    "themeMode"
-  ]);
-  companiesState = data.companies || {};
-  companyDomains = data.companyDomains || {};
-  generatedEmailsState = data.generatedEmails || {};
-  generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
-  appliedCompaniesState = data.appliedCompanies || {};
+  const data = await chrome.storage.local.get(["themeMode", "emailDomainsByCompany"]);
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
+  emailDomains = data.emailDomainsByCompany || {};
+  await SharedApi.ensureSignedIn();
+  const snapshot = await SharedApi.getSnapshot();
+  applySnapshot(snapshot);
 
   loadCompanyOptions();
   const company = getSelectedCompany();
@@ -267,23 +242,21 @@ async function init() {
   }
 
   document.getElementById("companySelect").addEventListener("change", handleCompanyChange);
-  document.getElementById("domainInput").addEventListener("blur", handleDomainChange);
+  document.getElementById("domainInput").addEventListener("blur", () => handleDomainChange().catch(() => {}));
   document.getElementById("domainInput").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
-      handleDomainChange();
+      handleDomainChange().catch(() => {});
     }
   });
-  document.getElementById("generateBtn").addEventListener("click", generateEmails);
-  document.getElementById("copyBtn").addEventListener("click", copyEmails);
+  document.getElementById("generateBtn").addEventListener("click", () => generateEmails().catch((e) => alert(e.message)));
+  document.getElementById("copyBtn").addEventListener("click", () => copyEmails().catch(() => alert("Could not copy emails.")));
   document.getElementById("exportBtn").addEventListener("click", exportEmails);
   document.getElementById("openSendEmailBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("send-email.html");
-    window.open(url);
+    window.open(chrome.runtime.getURL("send-email.html"));
   });
   document.getElementById("backBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("dashboard.html");
-    window.location.href = url;
+    window.location.href = chrome.runtime.getURL("dashboard.html");
   });
 }
 
-init();
+init().catch((error) => alert(`Init failed: ${error.message}`));

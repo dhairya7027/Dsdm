@@ -1,16 +1,23 @@
 let companiesState = {};
 let generatedEmailsState = {};
+let generatedEmailsByFormatState = {};
 let appliedCompaniesState = {};
 let companyDomainsState = {};
 let cleanupCompaniesState = {};
+let companyAddedByState = {};
+let companyLatestApplierState = {};
 let applicationLogState = [];
+let usersState = [];
+let meUsername = "";
 let selectedCompanies = new Set();
 let lastRendered = [];
 let allNamesVisible = false;
 let appliedTab = "not-applied";
 let selectedDomain = "software";
 let themeMode = "light";
-let dailyAppliedStats = { date: "", count: 0 };
+let snapshotVersion = 0;
+let pollTimer = null;
+
 const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
 const DOMAIN_LABELS = {
   software: "Software",
@@ -22,51 +29,23 @@ const DOMAIN_LABELS = {
 function normalizeNames(value) {
   const seen = new Set();
   const result = [];
-  value
+  (Array.isArray(value) ? value : [])
     .map((name) => String(name).trim())
     .filter((name) => name.length > 0)
     .forEach((name) => {
       const key = name.toLowerCase();
-      if (seen.has(key)) {
-        return;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(name);
       }
-      seen.add(key);
-      result.push(name);
     });
   return result;
 }
 
-function sanitizeCompanies(raw) {
-  const cleaned = {};
-  if (!raw || typeof raw !== "object") {
-    return cleaned;
-  }
-
-  Object.keys(raw).forEach((company) => {
-    const names = Array.isArray(raw[company]) ? raw[company] : [];
-    const normalized = normalizeNames(names);
-    const trimmedCompany = company.trim();
-    if (trimmedCompany && normalized.length > 0) {
-      cleaned[trimmedCompany] = normalized;
-    }
-  });
-
-  return cleaned;
-}
-
-function sanitizeAppliedCompanies(raw, companies) {
-  const cleaned = {};
-  if (!raw || typeof raw !== "object") {
-    return cleaned;
-  }
-
-  Object.keys(companies).forEach((company) => {
-    if (raw[company] === true) {
-      cleaned[company] = true;
-    }
-  });
-
-  return cleaned;
+function normalizeEmails(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((email) => String(email).trim())
+    .filter((email) => email.length > 0);
 }
 
 function normalizeDomain(value) {
@@ -74,85 +53,16 @@ function normalizeDomain(value) {
   return DOMAIN_ORDER.includes(key) ? key : "software";
 }
 
-function sanitizeCompanyDomains(raw, companies) {
-  const cleaned = {};
-  Object.keys(companies).forEach((company) => {
-    const incoming = raw && typeof raw === "object" ? raw[company] : null;
-    cleaned[company] = normalizeDomain(incoming);
-  });
-  return cleaned;
-}
-
-function sanitizeCleanupCompanies(raw, companies) {
-  const cleaned = {};
-  if (!raw || typeof raw !== "object") {
-    return cleaned;
-  }
-
-  Object.keys(companies).forEach((company) => {
-    if (raw[company] === true) {
-      cleaned[company] = true;
-    }
-  });
-
-  return cleaned;
-}
-
-function sanitizeApplicationLog(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-
-  return raw
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") {
-        return null;
-      }
-      const company = String(entry.company || "").trim();
-      const dateKey = String(entry.dateKey || "").trim();
-      const timestamp = String(entry.timestamp || "").trim();
-      const action = String(entry.action || "").trim().toLowerCase();
-      if (!company || !dateKey || !timestamp || action !== "applied") {
-        return null;
-      }
-      return { company, dateKey, timestamp, action: "applied" };
-    })
-    .filter(Boolean);
-}
-
-function escapeCSV(value) {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
-
-function downloadTextFile(filename, content, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+function getTodayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function allNames(companies) {
   return Object.values(companies).flatMap((names) => normalizeNames(names));
-}
-
-function updateStats(companies) {
-  const companyEntries = Object.entries(companies);
-  const names = allNames(companies);
-  const uniqueNames = new Set(names.map((name) => name.toLowerCase()));
-
-  document.getElementById("companiesCount").textContent = String(companyEntries.length);
-  document.getElementById("namesCount").textContent = String(names.length);
-  document.getElementById("uniqueNamesCount").textContent = String(uniqueNames.size);
-  document.getElementById("selectedCompaniesCount").textContent = String(selectedCompanies.size);
-  document.getElementById("dailyAppliedCount").textContent = String(dailyAppliedStats.count || 0);
-}
-
-function updateLastUpdated() {
-  const stamp = new Date().toLocaleString();
-  document.getElementById("lastUpdated").textContent = `Updated ${stamp}`;
 }
 
 function applyThemeMode() {
@@ -170,161 +80,37 @@ async function toggleThemeMode() {
   await chrome.storage.local.set({ themeMode });
 }
 
-
-function getTodayKey() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function updateLastUpdated() {
+  const stamp = new Date().toLocaleString();
+  document.getElementById("lastUpdated").textContent = `Updated ${stamp}`;
 }
 
-function ensureDailyAppliedStats() {
+function computeDailyAppliedCount() {
   const today = getTodayKey();
-  if (!dailyAppliedStats || dailyAppliedStats.date !== today) {
-    dailyAppliedStats = { date: today, count: 0 };
-    return true;
+  const uniqueCompanies = new Set(
+    applicationLogState
+      .filter((entry) => entry.dateKey === today && entry.action === "applied")
+      .map((entry) => entry.company)
+  );
+  return uniqueCompanies.size;
+}
+
+function updateStats() {
+  const companyEntries = Object.entries(companiesState);
+  const names = allNames(companiesState);
+  const uniqueNames = new Set(names.map((name) => name.toLowerCase()));
+  document.getElementById("companiesCount").textContent = String(companyEntries.length);
+  document.getElementById("namesCount").textContent = String(names.length);
+  document.getElementById("uniqueNamesCount").textContent = String(uniqueNames.size);
+  document.getElementById("selectedCompaniesCount").textContent = String(selectedCompanies.size);
+  document.getElementById("dailyAppliedCount").textContent = String(computeDailyAppliedCount());
+}
+
+function updateCurrentUserLabel() {
+  const node = document.getElementById("currentUserLabel");
+  if (node) {
+    node.textContent = `User: ${meUsername || "-"}`;
   }
-  if (!Number.isFinite(dailyAppliedStats.count) || dailyAppliedStats.count < 0) {
-    dailyAppliedStats.count = 0;
-    return true;
-  }
-  return false;
-}
-
-function appendApplicationLog(company) {
-  const now = new Date();
-  applicationLogState.push({
-    company,
-    dateKey: getTodayKey(),
-    timestamp: now.toISOString(),
-    action: "applied"
-  });
-}
-
-function removeLatestApplicationLogForCompany(company) {
-  let latestIndex = -1;
-  let latestTime = -1;
-
-  applicationLogState.forEach((entry, index) => {
-    if (entry.company !== company || entry.action !== "applied") {
-      return;
-    }
-    const time = new Date(entry.timestamp).getTime();
-    if (Number.isFinite(time) && time > latestTime) {
-      latestTime = time;
-      latestIndex = index;
-    }
-  });
-
-  if (latestIndex >= 0) {
-    applicationLogState.splice(latestIndex, 1);
-  }
-}
-
-function sortEntries(entries, sortValue) {
-  if (sortValue === "company-desc") {
-    entries.sort((a, b) => b[0].localeCompare(a[0]));
-    return;
-  }
-
-  if (sortValue === "names-desc") {
-    entries.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-    return;
-  }
-
-  if (sortValue === "names-asc") {
-    entries.sort((a, b) => a[1].length - b[1].length || a[0].localeCompare(b[0]));
-    return;
-  }
-
-  entries.sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-function filterEntries(entries, query) {
-  if (!query) {
-    return entries;
-  }
-
-  const lowered = query.toLowerCase();
-  return entries.filter(([company, names]) => {
-    if (company.toLowerCase().includes(lowered)) {
-      return true;
-    }
-    return names.some((name) => name.toLowerCase().includes(lowered));
-  });
-}
-
-function isCompanyApplied(company) {
-  return appliedCompaniesState[company] === true;
-}
-
-function setCompanyApplied(company, applied) {
-  if (applied) {
-    appliedCompaniesState[company] = true;
-  } else {
-    delete appliedCompaniesState[company];
-  }
-}
-
-function pruneAppliedCompanies() {
-  appliedCompaniesState = sanitizeAppliedCompanies(appliedCompaniesState, companiesState);
-}
-
-function pruneCompanyDomains() {
-  companyDomainsState = sanitizeCompanyDomains(companyDomainsState, companiesState);
-}
-
-function getCompanyDomain(company) {
-  return normalizeDomain(companyDomainsState[company]);
-}
-
-function setCompanyDomain(company, domain) {
-  companyDomainsState[company] = normalizeDomain(domain);
-}
-
-function isCompanyCleanupDone(company) {
-  return cleanupCompaniesState[company] === true;
-}
-
-function setCompanyCleanupDone(company, done) {
-  if (done) {
-    cleanupCompaniesState[company] = true;
-  } else {
-    delete cleanupCompaniesState[company];
-  }
-}
-
-function pruneCleanupCompanies() {
-  cleanupCompaniesState = sanitizeCleanupCompanies(cleanupCompaniesState, companiesState);
-}
-
-function createNamesContainer(names) {
-  const namesContainer = document.createElement("div");
-  namesContainer.className = "names";
-
-  names.forEach((name) => {
-    const pill = document.createElement("span");
-    pill.className = "name-pill";
-    pill.textContent = name;
-    namesContainer.appendChild(pill);
-  });
-
-  return namesContainer;
-}
-
-function normalizeEmails(value) {
-  return (Array.isArray(value) ? value : [])
-    .map((email) => String(email).trim())
-    .filter((email) => email.length > 0);
-}
-
-function pruneGeneratedEmails() {
-  Object.keys(generatedEmailsState).forEach((company) => {
-    if (!companiesState[company]) {
-      delete generatedEmailsState[company];
-    }
-  });
 }
 
 function updateToggleAllNamesButton() {
@@ -344,6 +130,47 @@ function setCardNamesVisibility(card, visible) {
   namesContainer.dataset.namesVisible = visible ? "true" : "false";
   namesContainer.classList.toggle("hidden", !visible);
   toggleButton.textContent = visible ? "Hide Names" : "Show Names";
+}
+
+function sortEntries(entries, sortValue) {
+  if (sortValue === "company-desc") {
+    entries.sort((a, b) => b[0].localeCompare(a[0]));
+    return;
+  }
+  if (sortValue === "names-desc") {
+    entries.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    return;
+  }
+  if (sortValue === "names-asc") {
+    entries.sort((a, b) => a[1].length - b[1].length || a[0].localeCompare(b[0]));
+    return;
+  }
+  entries.sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function filterEntries(entries, query) {
+  if (!query) {
+    return entries;
+  }
+  const lowered = query.toLowerCase();
+  return entries.filter(([company, names]) => {
+    if (company.toLowerCase().includes(lowered)) {
+      return true;
+    }
+    return names.some((name) => name.toLowerCase().includes(lowered));
+  });
+}
+
+function isCompanyApplied(company) {
+  return appliedCompaniesState[company] === true;
+}
+
+function isCompanyCleanupDone(company) {
+  return cleanupCompaniesState[company] === true;
+}
+
+function getCompanyDomain(company) {
+  return normalizeDomain(companyDomainsState[company]);
 }
 
 function filterByAppliedTab(entries) {
@@ -379,17 +206,10 @@ function updateAppliedTabButtons() {
   if (!notAppliedButton || !appliedButton || !appliedCleanupButton) {
     return;
   }
-
-  const domainCompanies = Object.keys(companiesState)
-    .filter((company) => getCompanyDomain(company) === selectedDomain);
+  const domainCompanies = Object.keys(companiesState).filter((company) => getCompanyDomain(company) === selectedDomain);
   const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company)).length;
-  const appliedCount = domainCompanies.filter((company) => {
-    return isCompanyApplied(company) && !isCompanyCleanupDone(company);
-  }).length;
-  const appliedCleanupCount = domainCompanies.filter((company) => {
-    return isCompanyApplied(company) && isCompanyCleanupDone(company);
-  }).length;
-
+  const appliedCount = domainCompanies.filter((company) => isCompanyApplied(company) && !isCompanyCleanupDone(company)).length;
+  const appliedCleanupCount = domainCompanies.filter((company) => isCompanyApplied(company) && isCompanyCleanupDone(company)).length;
   notAppliedButton.classList.toggle("active", appliedTab === "not-applied");
   appliedButton.classList.toggle("active", appliedTab === "applied");
   appliedCleanupButton.classList.toggle("active", appliedTab === "applied-cleanup");
@@ -398,17 +218,80 @@ function updateAppliedTabButtons() {
   appliedCleanupButton.textContent = `Applied + Cleanup (${appliedCleanupCount})`;
 }
 
-function renderCompanies(companies) {
+function createNamesContainer(names) {
+  const namesContainer = document.createElement("div");
+  namesContainer.className = "names";
+  names.forEach((name) => {
+    const pill = document.createElement("span");
+    pill.className = "name-pill";
+    pill.textContent = name;
+    namesContainer.appendChild(pill);
+  });
+  return namesContainer;
+}
+
+function escapeCSV(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderUserStats() {
+  const host = document.getElementById("userStats");
+  if (!host) {
+    return;
+  }
+  const appliedCounts = {};
+  applicationLogState.forEach((entry) => {
+    if (entry.action !== "applied") {
+      return;
+    }
+    const username = String(entry.username || "").trim();
+    if (!username) {
+      return;
+    }
+    appliedCounts[username] = (appliedCounts[username] || 0) + 1;
+  });
+
+  const rows = usersState.map((username) => ({
+    username,
+    applied: appliedCounts[username] || 0
+  })).sort((a, b) => b.applied - a.applied || a.username.localeCompare(b.username));
+
+  host.innerHTML = "";
+  if (!rows.length) {
+    host.innerHTML = `<div class="empty">No users found.</div>`;
+    return;
+  }
+
+  rows.forEach((row) => {
+    const card = document.createElement("article");
+    card.className = "stat-card";
+    card.innerHTML = `
+      <div class="stat-label">${row.username === meUsername ? "You" : "User"}</div>
+      <div class="meta">${row.username}</div>
+      <div class="stat-value">${row.applied}</div>
+    `;
+    host.appendChild(card);
+  });
+}
+
+function renderCompanies() {
   const dashboard = document.getElementById("dashboard");
   const searchValue = document.getElementById("searchInput").value.trim();
   const sortValue = document.getElementById("sortSelect").value;
-  const entries = Object.entries(companies).map(([company, names]) => [
-    company,
-    normalizeNames(names)
-  ]);
+  const entries = Object.entries(companiesState).map(([company, names]) => [company, normalizeNames(names)]);
 
   selectedCompanies.forEach((company) => {
-    if (!companies[company]) {
+    if (!companiesState[company]) {
       selectedCompanies.delete(company);
     }
   });
@@ -442,7 +325,6 @@ function renderCompanies(companies) {
     const card = document.createElement("section");
     card.className = "card";
     card.dataset.company = company;
-
     if (selectedCompanies.has(company)) {
       card.classList.add("selected");
     }
@@ -459,15 +341,19 @@ function renderCompanies(companies) {
     const title = document.createElement("h2");
     title.className = "company-title";
     title.textContent = company;
+
     const ratioBadge = document.createElement("span");
     ratioBadge.className = "ratio-badge";
+    const emails = normalizeEmails(generatedEmailsState[company]);
+    const percent = names.length ? Math.round((emails.length / names.length) * 100) : 0;
+    ratioBadge.textContent = `${emails.length}/${names.length} • ${percent}%`;
+
     const meta = document.createElement("div");
     meta.className = "meta";
-    const savedEmails = normalizeEmails(generatedEmailsState[company]);
-    const percent = names.length ? Math.round((savedEmails.length / names.length) * 100) : 0;
-    ratioBadge.textContent = `${savedEmails.length}/${names.length} • ${percent}%`;
     const appliedStatus = isCompanyApplied(company) ? "Applied" : "Not Applied";
-    meta.textContent = `${names.length} name(s) | ${appliedStatus} | ${savedEmails.length} saved email(s)`;
+    const addedBy = companyAddedByState[company] || "-";
+    const latestApplier = companyLatestApplierState[company] || "-";
+    meta.textContent = `${names.length} name(s) | ${appliedStatus} | Added by: ${addedBy} | Latest applier: ${latestApplier}`;
     titleWrap.appendChild(title);
     titleWrap.appendChild(ratioBadge);
     titleWrap.appendChild(meta);
@@ -538,27 +424,24 @@ function renderCompanies(companies) {
     cleanupSelection.appendChild(cleanupCheckbox);
     cleanupSelection.appendChild(cleanupText);
 
-    top.appendChild(titleWrap);
-    top.appendChild(actions);
-
-    const cardControls = document.createElement("div");
-    cardControls.className = "card-controls";
-    cardControls.appendChild(selection);
-    cardControls.appendChild(domainSelection);
-    cardControls.appendChild(appliedSelection);
-    cardControls.appendChild(cleanupSelection);
-
     const namesContainer = createNamesContainer(names);
     namesContainer.dataset.namesVisible = allNamesVisible ? "true" : "false";
     namesContainer.classList.toggle("hidden", !allNamesVisible);
 
-    card.appendChild(top);
-    card.appendChild(cardControls);
-    card.appendChild(namesContainer);
+    top.appendChild(titleWrap);
+    top.appendChild(actions);
+    const controls = document.createElement("div");
+    controls.className = "card-controls";
+    controls.appendChild(selection);
+    controls.appendChild(domainSelection);
+    controls.appendChild(appliedSelection);
+    controls.appendChild(cleanupSelection);
 
+    card.appendChild(top);
+    card.appendChild(controls);
+    card.appendChild(namesContainer);
     dashboard.appendChild(card);
     setCardNamesVisibility(card, allNamesVisible);
-
   });
 
   updateToggleAllNamesButton();
@@ -566,39 +449,73 @@ function renderCompanies(companies) {
   updateAppliedTabButtons();
 }
 
-async function persistCompanies() {
-  ensureDailyAppliedStats();
-  await chrome.storage.local.set({
-    companies: companiesState,
-    generatedEmails: generatedEmailsState,
-    appliedCompanies: appliedCompaniesState,
-    companyDomains: companyDomainsState,
-    cleanupCompanies: cleanupCompaniesState,
-    dailyAppliedStats,
-    applicationLog: applicationLogState
-  });
-}
+function applySnapshot(snapshot) {
+  const companies = {};
+  const generatedEmails = {};
+  const generatedByFormat = {};
+  const applied = {};
+  const domains = {};
+  const cleanup = {};
+  const addedBy = {};
+  const latestApplier = {};
 
-function mergeCompanies(target, source) {
-  Object.entries(source).forEach(([company, names]) => {
-    const existing = target[company] || [];
-    const merged = normalizeNames([...existing, ...normalizeNames(names)]);
-    if (merged.length > 0) {
-      target[company] = merged;
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
     }
+    companies[company] = normalizeNames(item.names || []);
+    generatedEmails[company] = normalizeEmails(item.generatedEmails || []);
+    generatedByFormat[company] = item.generatedEmailsByFormat || {};
+    domains[company] = normalizeDomain(item.domain);
+    if (item.applied === true) {
+      applied[company] = true;
+    }
+    if (item.cleanupDone === true) {
+      cleanup[company] = true;
+    }
+    addedBy[company] = item.addedBy || "-";
+    latestApplier[company] = item.latestApplier || null;
   });
+
+  companiesState = companies;
+  generatedEmailsState = generatedEmails;
+  generatedEmailsByFormatState = generatedByFormat;
+  appliedCompaniesState = applied;
+  companyDomainsState = domains;
+  cleanupCompaniesState = cleanup;
+  companyAddedByState = addedBy;
+  companyLatestApplierState = latestApplier;
+  usersState = Array.isArray(snapshot.users) ? snapshot.users : [];
+  meUsername = snapshot.me && snapshot.me.username ? snapshot.me.username : "";
+  applicationLogState = Array.isArray(snapshot.applicationLog) ? snapshot.applicationLog : [];
+  snapshotVersion = Number(snapshot.version || snapshotVersion || 0);
+
+  updateCurrentUserLabel();
+  updateStats();
+  renderUserStats();
+  renderCompanies();
+  updateLastUpdated();
 }
 
-async function handleCompanyAction(targetButton) {
-  const action = targetButton.dataset.action;
-  const card = targetButton.closest(".card");
+async function refreshSnapshot(force = false) {
+  const snapshot = await SharedApi.getSnapshot();
+  const nextVersion = Number(snapshot.version || 0);
+  if (!force && snapshotVersion && nextVersion === snapshotVersion) {
+    return;
+  }
+  applySnapshot(snapshot);
+}
+
+async function handleCompanyAction(button) {
+  const action = button.dataset.action;
+  const card = button.closest(".card");
   if (!card || !action) {
     return;
   }
-
   const company = card.dataset.company;
   const names = normalizeNames(companiesState[company] || []);
-  const emails = normalizeEmails(generatedEmailsState[company]);
+  const emails = normalizeEmails(generatedEmailsState[company] || []);
 
   if (action === "toggle") {
     const namesContainer = card.querySelector(".names");
@@ -614,7 +531,7 @@ async function handleCompanyAction(targetButton) {
 
   if (action === "copy-emails") {
     if (!emails.length) {
-      alert("No saved emails for this company yet. Generate emails first.");
+      alert("No saved emails for this company yet.");
       return;
     }
     await navigator.clipboard.writeText(emails.join(", "));
@@ -622,46 +539,29 @@ async function handleCompanyAction(targetButton) {
   }
 
   if (action === "edit-names") {
-    const input = prompt(
-      "Edit names (one per line or comma-separated):",
-      names.join("\n")
-    );
+    const input = prompt("Edit names (one per line or comma-separated):", names.join("\n"));
     if (input === null) {
       return;
     }
-
     const edited = normalizeNames(
       input
         .split(/[\n,]/)
         .map((name) => name.trim())
         .filter((name) => name.length > 0)
     );
-
     if (!edited.length) {
       alert("At least one valid name is required.");
       return;
     }
-
-    companiesState[company] = edited;
-    // Existing generated emails may no longer match edited names.
-    delete generatedEmailsState[company];
-    await persistCompanies();
-    updateStats(companiesState);
-    renderCompanies(companiesState);
-    updateLastUpdated();
+    await SharedApi.upsertCompanyNames(company, edited, getCompanyDomain(company));
+    await refreshSnapshot(true);
     return;
   }
 
   if (action === "export") {
     const rows = ["Company,Name"];
-    names.forEach((name) => {
-      rows.push(`${escapeCSV(company)},${escapeCSV(name)}`);
-    });
-    downloadTextFile(
-      `${company.toLowerCase().replace(/\s+/g, "-")}-names.csv`,
-      rows.join("\n"),
-      "text/csv"
-    );
+    names.forEach((name) => rows.push(`${escapeCSV(company)},${escapeCSV(name)}`));
+    downloadTextFile(`${company.toLowerCase().replace(/\s+/g, "-")}-names.csv`, rows.join("\n"), "text/csv");
     return;
   }
 
@@ -674,54 +574,19 @@ async function handleCompanyAction(targetButton) {
     if (!newName || newName === company) {
       return;
     }
-
-    const existing = companiesState[newName] || [];
-    const merged = normalizeNames([...existing, ...names]);
-    companiesState[newName] = merged;
-    const existingEmails = normalizeEmails(generatedEmailsState[newName]);
-    generatedEmailsState[newName] = [...new Set([...existingEmails, ...emails])];
-    if (isCompanyApplied(company) || isCompanyApplied(newName)) {
-      appliedCompaniesState[newName] = true;
-    } else {
-      delete appliedCompaniesState[newName];
-    }
-    if (isCompanyCleanupDone(company) || isCompanyCleanupDone(newName)) {
-      cleanupCompaniesState[newName] = true;
-    } else {
-      delete cleanupCompaniesState[newName];
-    }
-    companyDomainsState[newName] = getCompanyDomain(company);
-    delete companiesState[company];
-    delete generatedEmailsState[company];
-    delete appliedCompaniesState[company];
-    delete cleanupCompaniesState[company];
-    delete companyDomainsState[company];
-    if (selectedCompanies.has(company)) {
-      selectedCompanies.delete(company);
-      selectedCompanies.add(newName);
-    }
-    await persistCompanies();
-    updateStats(companiesState);
-    renderCompanies(companiesState);
-    updateLastUpdated();
+    await SharedApi.renameCompany(company, newName);
+    await refreshSnapshot(true);
     return;
   }
 
   if (action === "delete") {
-    const shouldDelete = confirm(`Delete all names for "${company}"?`);
+    const shouldDelete = confirm(`Delete all names for "${company}" permanently?`);
     if (!shouldDelete) {
       return;
     }
-    delete companiesState[company];
-    delete generatedEmailsState[company];
-    delete appliedCompaniesState[company];
-    delete cleanupCompaniesState[company];
-    delete companyDomainsState[company];
+    await SharedApi.deleteCompany(company);
     selectedCompanies.delete(company);
-    await persistCompanies();
-    updateStats(companiesState);
-    renderCompanies(companiesState);
-    updateLastUpdated();
+    await refreshSnapshot(true);
   }
 }
 
@@ -754,34 +619,23 @@ function exportAllCsv() {
     alert("No company data to export.");
     return;
   }
-
   const rows = ["Company,Name"];
   entries.forEach(([company, names]) => {
-    normalizeNames(names).forEach((name) => {
-      rows.push(`${escapeCSV(company)},${escapeCSV(name)}`);
-    });
+    names.forEach((name) => rows.push(`${escapeCSV(company)},${escapeCSV(name)}`));
   });
-
   downloadTextFile("linkedin-company-names.csv", rows.join("\n"), "text/csv");
 }
 
 function exportSelectedCsv() {
-  const entries = [...selectedCompanies].map((company) => [
-    company,
-    companiesState[company] || []
-  ]);
+  const entries = [...selectedCompanies].map((company) => [company, companiesState[company] || []]);
   if (!entries.length) {
     alert("No companies selected.");
     return;
   }
-
   const rows = ["Company,Name"];
   entries.forEach(([company, names]) => {
-    normalizeNames(names).forEach((name) => {
-      rows.push(`${escapeCSV(company)},${escapeCSV(name)}`);
-    });
+    names.forEach((name) => rows.push(`${escapeCSV(company)},${escapeCSV(name)}`));
   });
-
   downloadTextFile("selected-company-names.csv", rows.join("\n"), "text/csv");
 }
 
@@ -799,69 +653,56 @@ async function importJsonBackup(file) {
     alert("Invalid JSON file.");
     return;
   }
-
-  const incoming = sanitizeCompanies(parsed);
-  if (!Object.keys(incoming).length) {
+  if (!parsed || typeof parsed !== "object") {
     alert("No valid company data found in JSON.");
     return;
   }
-
-  const shouldReplace = confirm("Replace existing data? Press Cancel to merge instead.");
-  if (shouldReplace) {
-    companiesState = incoming;
-    pruneGeneratedEmails();
-    pruneAppliedCompanies();
-    pruneCleanupCompanies();
-    pruneCompanyDomains();
-    selectedCompanies = new Set();
-  } else {
-    mergeCompanies(companiesState, incoming);
-    pruneGeneratedEmails();
-    pruneAppliedCompanies();
-    pruneCleanupCompanies();
-    pruneCompanyDomains();
+  const entries = Object.entries(parsed).filter(([, names]) => Array.isArray(names));
+  if (!entries.length) {
+    alert("No valid company data found in JSON.");
+    return;
   }
-
-  await persistCompanies();
-  updateStats(companiesState);
-  renderCompanies(companiesState);
-  updateLastUpdated();
+  for (const [company, names] of entries) {
+    const normalized = normalizeNames(names);
+    if (!company.trim() || !normalized.length) {
+      continue;
+    }
+    await SharedApi.upsertCompanyNames(company, normalized, "software");
+  }
+  await refreshSnapshot(true);
 }
 
 async function clearAllData() {
-  const shouldClear = confirm("Delete all companies and names?");
+  const allCompanies = Object.keys(companiesState);
+  if (!allCompanies.length) {
+    return;
+  }
+  const shouldClear = confirm("Delete all companies and names permanently?");
   if (!shouldClear) {
     return;
   }
-  companiesState = {};
-  generatedEmailsState = {};
-  appliedCompaniesState = {};
-  cleanupCompaniesState = {};
-  companyDomainsState = {};
+  for (const company of allCompanies) {
+    await SharedApi.deleteCompany(company);
+  }
   selectedCompanies = new Set();
-  await persistCompanies();
-  updateStats(companiesState);
-  renderCompanies(companiesState);
-  updateLastUpdated();
+  await refreshSnapshot(true);
 }
 
 function selectVisible() {
-  lastRendered.forEach(([company]) => {
-    selectedCompanies.add(company);
-  });
-  updateStats(companiesState);
-  renderCompanies(companiesState);
+  lastRendered.forEach(([company]) => selectedCompanies.add(company));
+  updateStats();
+  renderCompanies();
 }
 
 function clearSelection() {
   selectedCompanies = new Set();
-  updateStats(companiesState);
-  renderCompanies(companiesState);
+  updateStats();
+  renderCompanies();
 }
 
 function toggleAllNamesVisibility() {
   allNamesVisible = !allNamesVisible;
-  renderCompanies(companiesState);
+  renderCompanies();
 }
 
 async function deleteSelected() {
@@ -869,110 +710,116 @@ async function deleteSelected() {
     alert("No companies selected.");
     return;
   }
-  const shouldDelete = confirm("Delete all selected companies?");
+  const shouldDelete = confirm("Delete all selected companies permanently?");
   if (!shouldDelete) {
     return;
   }
-
-  selectedCompanies.forEach((company) => {
-    delete companiesState[company];
-    delete generatedEmailsState[company];
-    delete appliedCompaniesState[company];
-    delete cleanupCompaniesState[company];
-    delete companyDomainsState[company];
-  });
+  for (const company of [...selectedCompanies]) {
+    await SharedApi.deleteCompany(company);
+  }
   selectedCompanies = new Set();
-  await persistCompanies();
-  updateStats(companiesState);
-  renderCompanies(companiesState);
-  updateLastUpdated();
+  await refreshSnapshot(true);
+}
+
+async function handleAddUser() {
+  const username = prompt("New username (lowercase):");
+  if (!username) {
+    return;
+  }
+  const password = prompt("Password (min 4 chars):");
+  if (!password) {
+    return;
+  }
+  await SharedApi.addUser(username, password);
+  await refreshSnapshot(true);
+  alert(`User "${username.toLowerCase()}" added.`);
+}
+
+async function handleRenameMe() {
+  const username = prompt("Enter your new username:", meUsername);
+  if (!username || username.toLowerCase() === meUsername) {
+    return;
+  }
+  await SharedApi.renameMe(username);
+  await refreshSnapshot(true);
+}
+
+async function handleLogout() {
+  await SharedApi.logout();
+  location.reload();
+}
+
+function setBackendStatus(message, isError) {
+  const node = document.getElementById("backendStatus");
+  if (!node) {
+    return;
+  }
+  node.textContent = message;
+  node.style.color = isError ? "#e11d48" : "";
+}
+
+async function syncBackendUi() {
+  const base = await SharedApi.getApiBase();
+  const input = document.getElementById("apiBaseInput");
+  if (input && !input.value) {
+    input.value = base;
+  }
+  setBackendStatus(`Current backend: ${base}`, false);
+}
+
+async function handleTestBackendUrl() {
+  const input = document.getElementById("apiBaseInput");
+  const value = input ? input.value : "";
+  await SharedApi.testConnection(value);
+  setBackendStatus("Backend reachable.", false);
+}
+
+async function handleSaveBackendUrl() {
+  const input = document.getElementById("apiBaseInput");
+  const value = input ? input.value : "";
+  const normalized = await SharedApi.setApiBase(value);
+  if (input) {
+    input.value = normalized;
+  }
+  setBackendStatus(`Saved backend: ${normalized}`, false);
+  alert("Backend URL saved. You will be asked to login again.");
+  location.reload();
 }
 
 async function initDashboard() {
-  const data = await chrome.storage.local.get([
-    "companies",
-    "generatedEmails",
-    "appliedCompanies",
-    "appliedNames",
-    "cleanupCompanies",
-    "companyDomains",
-    "themeMode",
-    "dailyAppliedStats",
-    "applicationLog"
-  ]);
-  const originalCompanies = data.companies || {};
-  companiesState = sanitizeCompanies(originalCompanies);
-  generatedEmailsState = data.generatedEmails || {};
-  const migratedAppliedCompanies = {};
-  if (data.appliedNames && typeof data.appliedNames === "object") {
-    Object.keys(companiesState).forEach((company) => {
-      const source = data.appliedNames[company];
-      if (source && typeof source === "object") {
-        const hasAnyApplied = Object.values(source).some((value) => value === true);
-        if (hasAnyApplied) {
-          migratedAppliedCompanies[company] = true;
-        }
-      }
-    });
-  }
-  appliedCompaniesState = sanitizeAppliedCompanies(
-    { ...migratedAppliedCompanies, ...(data.appliedCompanies || {}) },
-    companiesState
-  );
-  cleanupCompaniesState = sanitizeCleanupCompanies(data.cleanupCompanies || {}, companiesState);
-  companyDomainsState = sanitizeCompanyDomains(data.companyDomains || {}, companiesState);
-  applicationLogState = sanitizeApplicationLog(data.applicationLog || []);
+  const data = await chrome.storage.local.get(["themeMode"]);
   themeMode = data.themeMode === "dark" ? "dark" : "light";
-  dailyAppliedStats = data.dailyAppliedStats || { date: "", count: 0 };
-  const dailyStatsChanged = ensureDailyAppliedStats();
-  pruneGeneratedEmails();
-  pruneAppliedCompanies();
-  pruneCleanupCompanies();
-  pruneCompanyDomains();
-
-  if (
-    JSON.stringify(originalCompanies) !== JSON.stringify(companiesState) ||
-    JSON.stringify(data.appliedCompanies || {}) !== JSON.stringify(appliedCompaniesState) ||
-    JSON.stringify(data.cleanupCompanies || {}) !== JSON.stringify(cleanupCompaniesState) ||
-    JSON.stringify(data.companyDomains || {}) !== JSON.stringify(companyDomainsState) ||
-    JSON.stringify(data.applicationLog || []) !== JSON.stringify(applicationLogState) ||
-    dailyStatsChanged
-  ) {
-    await persistCompanies();
-  }
-
-  updateStats(companiesState);
   applyThemeMode();
-  renderCompanies(companiesState);
-  updateLastUpdated();
+  await syncBackendUi();
 
-  document.getElementById("searchInput").addEventListener("input", () => {
-    renderCompanies(companiesState);
+  document.getElementById("testBackendBtn").addEventListener("click", () => {
+    handleTestBackendUrl().catch((error) => setBackendStatus(`Backend test failed: ${error.message}`, true));
+  });
+  document.getElementById("saveBackendBtn").addEventListener("click", () => {
+    handleSaveBackendUrl().catch((error) => setBackendStatus(`Save failed: ${error.message}`, true));
   });
 
-  document.getElementById("sortSelect").addEventListener("change", () => {
-    renderCompanies(companiesState);
-  });
+  await SharedApi.ensureSignedIn();
+  await refreshSnapshot(true);
 
+  document.getElementById("searchInput").addEventListener("input", renderCompanies);
+  document.getElementById("sortSelect").addEventListener("change", renderCompanies);
   document.querySelectorAll("[data-domain-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextDomain = normalizeDomain(button.dataset.domainTab);
-      if (!nextDomain || nextDomain === selectedDomain) {
-        return;
+      if (nextDomain !== selectedDomain) {
+        selectedDomain = nextDomain;
+        renderCompanies();
       }
-      selectedDomain = nextDomain;
-      renderCompanies(companiesState);
     });
   });
-
   document.querySelectorAll("[data-applied-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextTab = button.dataset.appliedTab;
-      if (!nextTab || nextTab === appliedTab) {
-        return;
+      if (nextTab && nextTab !== appliedTab) {
+        appliedTab = nextTab;
+        renderCompanies();
       }
-      appliedTab = nextTab;
-      renderCompanies(companiesState);
     });
   });
 
@@ -987,64 +834,41 @@ async function initDashboard() {
       }
       return;
     }
-
     const button = event.target.closest("button[data-action]");
     if (!button) {
       return;
     }
-
     try {
       await handleCompanyAction(button);
-    } catch {
-      alert("Action failed. Please try again.");
+    } catch (error) {
+      alert(`Action failed: ${error.message}`);
     }
   });
 
   document.getElementById("dashboard").addEventListener("change", async (event) => {
     const domainSelect = event.target.closest("select[data-action='set-company-domain']");
     if (domainSelect) {
-      const company = domainSelect.dataset.company;
-      if (company) {
-        setCompanyDomain(company, domainSelect.value);
-        await persistCompanies();
-        renderCompanies(companiesState);
-        updateLastUpdated();
-      }
+      await SharedApi.setCompanyDomain(domainSelect.dataset.company, domainSelect.value);
+      await refreshSnapshot(true);
       return;
     }
 
     const appliedCheck = event.target.closest("input[data-action='mark-company-applied']");
     if (appliedCheck) {
-      const company = appliedCheck.dataset.company;
-      if (company) {
-        const wasApplied = isCompanyApplied(company);
-        setCompanyApplied(company, appliedCheck.checked);
-        if (appliedCheck.checked && !wasApplied) {
-          ensureDailyAppliedStats();
-          dailyAppliedStats.count += 1;
-          appendApplicationLog(company);
-        } else if (!appliedCheck.checked && wasApplied) {
-          ensureDailyAppliedStats();
-          dailyAppliedStats.count = Math.max(0, (dailyAppliedStats.count || 0) - 1);
-          removeLatestApplicationLogForCompany(company);
-        }
-        await persistCompanies();
-        updateStats(companiesState);
-        renderCompanies(companiesState);
-        updateLastUpdated();
+      if (!appliedCheck.checked) {
+        alert("Applied is one-way. Unapply is disabled.");
+        appliedCheck.checked = true;
+        return;
       }
+      await SharedApi.markCompanyApplied(appliedCheck.dataset.company);
+      await refreshSnapshot(true);
       return;
     }
 
     const cleanupCheck = event.target.closest("input[data-action='mark-company-cleanup']");
     if (cleanupCheck) {
-      const company = cleanupCheck.dataset.company;
-      if (company) {
-        setCompanyCleanupDone(company, cleanupCheck.checked);
-        await persistCompanies();
-        renderCompanies(companiesState);
-        updateLastUpdated();
-      }
+      await SharedApi.setCompanyCleanup(cleanupCheck.dataset.company, cleanupCheck.checked);
+      await refreshSnapshot(true);
       return;
     }
 
@@ -1052,41 +876,24 @@ async function initDashboard() {
     if (!checkbox) {
       return;
     }
-
     const company = checkbox.dataset.company;
     if (checkbox.checked) {
       selectedCompanies.add(company);
     } else {
       selectedCompanies.delete(company);
     }
-    updateStats(companiesState);
-    renderCompanies(companiesState);
+    updateStats();
   });
 
-  document.getElementById("copyAllBtn").addEventListener("click", async () => {
-    try {
-      await copyAllNames();
-    } catch {
-      alert("Could not copy all names.");
-    }
-  });
-
+  document.getElementById("copyAllBtn").addEventListener("click", () => copyAllNames().catch(() => alert("Could not copy all names.")));
   document.getElementById("exportAllBtn").addEventListener("click", exportAllCsv);
-  document.getElementById("clearAllBtn").addEventListener("click", clearAllData);
-
+  document.getElementById("clearAllBtn").addEventListener("click", () => clearAllData().catch((e) => alert(e.message)));
   document.getElementById("selectVisibleBtn").addEventListener("click", selectVisible);
   document.getElementById("clearSelectionBtn").addEventListener("click", clearSelection);
   document.getElementById("toggleAllNamesBtn").addEventListener("click", toggleAllNamesVisibility);
-  document.getElementById("copySelectedBtn").addEventListener("click", async () => {
-    try {
-      await copySelectedNames();
-    } catch {
-      alert("Could not copy selected names.");
-    }
-  });
+  document.getElementById("copySelectedBtn").addEventListener("click", () => copySelectedNames().catch(() => alert("Could not copy selected names.")));
   document.getElementById("exportSelectedBtn").addEventListener("click", exportSelectedCsv);
-  document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelected);
-
+  document.getElementById("deleteSelectedBtn").addEventListener("click", () => deleteSelected().catch((e) => alert(e.message)));
   document.getElementById("exportJsonBtn").addEventListener("click", exportJsonBackup);
   document.getElementById("importJsonInput").addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
@@ -1097,28 +904,33 @@ async function initDashboard() {
     event.target.value = "";
   });
 
-  document.getElementById("emailGenBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("email-generator.html");
-    window.open(url);
-  });
+  document.getElementById("addUserBtn").addEventListener("click", () => handleAddUser().catch((e) => alert(e.message)));
+  document.getElementById("renameMeBtn").addEventListener("click", () => handleRenameMe().catch((e) => alert(e.message)));
+  document.getElementById("logoutBtn").addEventListener("click", () => handleLogout().catch((e) => alert(e.message)));
+  document.getElementById("currentUserBtn").addEventListener("click", () => alert(`Signed in as ${meUsername}`));
 
+  document.getElementById("emailGenBtn").addEventListener("click", () => {
+    window.open(chrome.runtime.getURL("email-generator.html"));
+  });
   document.getElementById("sendEmailBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("send-email.html");
-    window.open(url);
+    window.open(chrome.runtime.getURL("send-email.html"));
   });
   document.getElementById("emailCleanupBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("email-cleanup.html");
-    window.open(url);
+    window.open(chrome.runtime.getURL("email-cleanup.html"));
   });
   document.getElementById("statsPageBtn").addEventListener("click", () => {
-    const url = chrome.runtime.getURL("stats.html");
-    window.open(url);
+    window.open(chrome.runtime.getURL("stats.html"));
   });
-
   document.getElementById("homeBtn").addEventListener("click", () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
   document.getElementById("themeToggleBtn").addEventListener("click", toggleThemeMode);
+
+  pollTimer = setInterval(() => {
+    refreshSnapshot(false).catch(() => {});
+  }, 3000);
 }
 
-initDashboard();
+initDashboard().catch((error) => {
+  alert(`Dashboard init failed: ${error.message}`);
+});
