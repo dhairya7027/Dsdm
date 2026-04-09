@@ -639,9 +639,11 @@ function exportSelectedCsv() {
   downloadTextFile("selected-company-names.csv", rows.join("\n"), "text/csv");
 }
 
-function exportJsonBackup() {
-  const data = JSON.stringify(companiesState, null, 2);
-  downloadTextFile("linkedin-companies-backup.json", data, "application/json");
+async function exportJsonBackup() {
+  // Export the full extension storage so nothing is lost during migration/debug.
+  const fullStorage = await chrome.storage.local.get(null);
+  const data = JSON.stringify(fullStorage, null, 2);
+  downloadTextFile("linkedin-full-storage-backup.json", data, "application/json");
 }
 
 async function importJsonBackup(file) {
@@ -657,7 +659,12 @@ async function importJsonBackup(file) {
     alert("No valid company data found in JSON.");
     return;
   }
-  const entries = Object.entries(parsed).filter(([, names]) => Array.isArray(names));
+
+  // Support both old backup shape ({Company: [names]}) and full storage backup ({ companies: {...}, ... }).
+  const sourceCompanies = parsed.companies && typeof parsed.companies === "object"
+    ? parsed.companies
+    : parsed;
+  const entries = Object.entries(sourceCompanies).filter(([, names]) => Array.isArray(names));
   if (!entries.length) {
     alert("No valid company data found in JSON.");
     return;
