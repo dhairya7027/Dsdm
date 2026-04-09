@@ -5,14 +5,23 @@ const { Pool } = require("pg");
 
 const PORT = Number(process.env.PORT || 8787);
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const STRICT_SSL = process.env.PG_STRICT_SSL === "true";
 
 if (!DATABASE_URL) {
   throw new Error("DATABASE_URL is required. Point it to your Supabase Postgres URL.");
 }
 
+function normalizeDatabaseUrl(value) {
+  const url = new URL(value);
+  // We control TLS through the pg ssl object below.
+  url.searchParams.delete("sslmode");
+  url.searchParams.delete("uselibpqcompat");
+  return url.toString();
+}
+
 const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  connectionString: normalizeDatabaseUrl(DATABASE_URL),
+  ssl: STRICT_SSL ? { rejectUnauthorized: true } : { rejectUnauthorized: false }
 });
 
 const app = express();
