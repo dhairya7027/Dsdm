@@ -639,11 +639,21 @@ function exportSelectedCsv() {
   downloadTextFile("selected-company-names.csv", rows.join("\n"), "text/csv");
 }
 
-async function exportJsonBackup() {
+function exportJsonBackup() {
   // Export the full extension storage so nothing is lost during migration/debug.
-  const fullStorage = await chrome.storage.local.get(null);
-  const data = JSON.stringify(fullStorage, null, 2);
-  downloadTextFile("linkedin-full-storage-backup.json", data, "application/json");
+  chrome.storage.local.get(null, (fullStorage) => {
+    if (chrome.runtime.lastError) {
+      alert(`Export failed: ${chrome.runtime.lastError.message}`);
+      return;
+    }
+    try {
+      const data = JSON.stringify(fullStorage || {}, null, 2);
+      downloadTextFile("linkedin-full-storage-backup.json", data, "application/json");
+      alert("Backup downloaded: linkedin-full-storage-backup.json");
+    } catch (error) {
+      alert(`Export failed: ${error.message}`);
+    }
+  });
 }
 
 async function importJsonBackup(file) {
