@@ -1,131 +1,52 @@
-const crypto = require('crypto');
-const path = require('path');
-const express = require('express');
-const cors = require('cors');
-const Database = require('better-sqlite3');
+const crypto = require("crypto");
+const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
 
 const PORT = Number(process.env.PORT || 8787);
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'shared.db');
+const DATABASE_URL = process.env.DATABASE_URL || "";
+
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL is required. Point it to your Supabase Postgres URL.");
+}
+
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
 const app = express();
-const db = new Database(DB_PATH);
-
-db.pragma('journal_mode = WAL');
-
-aapp();
-
-function aapp() {
-  app.use(cors());
-  app.use(express.json({ limit: '1mb' }));
-  initSchema();
-  mountRoutes();
-  app.listen(PORT, () => {
-    console.log(`Shared backend running on http://localhost:${PORT}`);
-  });
-}
-
-function initSchema() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS companies (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      name_key TEXT NOT NULL UNIQUE,
-      domain TEXT NOT NULL DEFAULT 'software',
-      added_by_user_id INTEGER NOT NULL,
-      applied INTEGER NOT NULL DEFAULT 0,
-      latest_applier_user_id INTEGER,
-      cleanup_done INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (added_by_user_id) REFERENCES users(id),
-      FOREIGN KEY (latest_applier_user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS company_names (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      name_key TEXT NOT NULL,
-      UNIQUE(company_id, name_key),
-      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS generated_emails (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company_id INTEGER NOT NULL,
-      email TEXT NOT NULL,
-      email_key TEXT NOT NULL,
-      format_key TEXT NOT NULL DEFAULT '',
-      UNIQUE(company_id, email_key, format_key),
-      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS application_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      company_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      timestamp TEXT NOT NULL,
-      date_key TEXT NOT NULL,
-      action TEXT NOT NULL,
-      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS kv_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    INSERT OR IGNORE INTO kv_meta(key, value) VALUES('data_version', '1');
-  `);
-}
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
 
 function normalizeUsername(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || "").trim().toLowerCase();
 }
 
 function normalizeCompany(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ');
+  return String(value || "").trim().replace(/\s+/g, " ");
 }
 
 function normalizeName(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ');
+  return String(value || "").trim().replace(/\s+/g, " ");
 }
 
 function normalizeDomain(value) {
-  const v = String(value || '').trim().toLowerCase();
-  const allowed = new Set(['software', 'quant', 'marketing', 'electrical']);
-  return allowed.has(v) ? v : 'software';
+  const v = String(value || "").trim().toLowerCase();
+  const allowed = new Set(["software", "quant", "marketing", "electrical"]);
+  return allowed.has(v) ? v : "software";
 }
 
 function normalizeEmail(value) {
-  return String(value || '').trim();
-}
-
-function nameKey(value) {
-  return normalizeName(value).toLowerCase();
+  return String(value || "").trim();
 }
 
 function companyKey(value) {
   return normalizeCompany(value).toLowerCase();
 }
 
-function usernameKey(value) {
-  return normalizeUsername(value);
+function nameKey(value) {
+  return normalizeName(value).toLowerCase();
 }
 
 function emailKey(value) {
@@ -139,146 +60,226 @@ function nowIso() {
 function todayKey() {
   const d = new Date();
   const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
 function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
   return `${salt}:${derived}`;
 }
 
 function verifyPassword(password, hash) {
-  const [salt, stored] = String(hash || '').split(':');
+  const [salt, stored] = String(hash || "").split(":");
   if (!salt || !stored) {
     return false;
   }
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
-  const a = Buffer.from(derived, 'hex');
-  const b = Buffer.from(stored, 'hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
+  const a = Buffer.from(derived, "hex");
+  const b = Buffer.from(stored, "hex");
   if (a.length !== b.length) {
     return false;
   }
   return crypto.timingSafeEqual(a, b);
 }
 
-function bumpDataVersion() {
-  db.prepare(`
+async function q(text, params = []) {
+  return pool.query(text, params);
+}
+
+async function initSchema() {
+  await q(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      name_key TEXT NOT NULL UNIQUE,
+      domain TEXT NOT NULL DEFAULT 'software',
+      added_by_user_id BIGINT NOT NULL REFERENCES users(id),
+      applied BOOLEAN NOT NULL DEFAULT FALSE,
+      latest_applier_user_id BIGINT REFERENCES users(id),
+      cleanup_done BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS company_names (
+      id BIGSERIAL PRIMARY KEY,
+      company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      name_key TEXT NOT NULL,
+      UNIQUE(company_id, name_key)
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS generated_emails (
+      id BIGSERIAL PRIMARY KEY,
+      company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      email_key TEXT NOT NULL,
+      format_key TEXT NOT NULL DEFAULT '',
+      UNIQUE(company_id, email_key, format_key)
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS application_log (
+      id BIGSERIAL PRIMARY KEY,
+      company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      user_id BIGINT NOT NULL REFERENCES users(id),
+      timestamp TIMESTAMPTZ NOT NULL,
+      date_key TEXT NOT NULL,
+      action TEXT NOT NULL
+    );
+  `);
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS kv_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
+  await q(`
+    INSERT INTO kv_meta(key, value)
+    VALUES('data_version', '1')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+}
+
+async function bumpDataVersion(client = null) {
+  const runner = client || pool;
+  await runner.query(`
     UPDATE kv_meta
-    SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+    SET value = CAST(CAST(value AS BIGINT) + 1 AS TEXT)
     WHERE key = 'data_version'
-  `).run();
+  `);
 }
 
-function getDataVersion() {
-  const row = db.prepare(`SELECT value FROM kv_meta WHERE key = 'data_version'`).get();
-  return Number(row ? row.value : 1);
+async function getDataVersion() {
+  const result = await q(`SELECT value FROM kv_meta WHERE key = 'data_version'`);
+  return Number(result.rows[0] ? result.rows[0].value : 1);
 }
 
-function createSession(userId) {
-  const token = crypto.randomBytes(24).toString('hex');
-  db.prepare(`INSERT INTO sessions(token, user_id, created_at) VALUES(?, ?, ?)`).run(token, userId, nowIso());
+async function createSession(userId) {
+  const token = crypto.randomBytes(24).toString("hex");
+  await q(
+    `INSERT INTO sessions(token, user_id, created_at) VALUES($1, $2, $3)`,
+    [token, userId, nowIso()]
+  );
   return token;
 }
 
-function getSessionUser(token) {
-  return db.prepare(`
-    SELECT u.id, u.username
-    FROM sessions s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.token = ?
-  `).get(token);
+async function getSessionUser(token) {
+  const result = await q(
+    `
+      SELECT u.id, u.username
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.token = $1
+    `,
+    [token]
+  );
+  return result.rows[0] || null;
 }
 
-function authRequired(req, res, next) {
-  const auth = String(req.headers.authorization || '');
-  if (!auth.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing auth token' });
-    return;
-  }
-  const token = auth.slice(7).trim();
-  const user = getSessionUser(token);
-  if (!user) {
-    res.status(401).json({ error: 'Invalid auth token' });
-    return;
-  }
-  req.token = token;
-  req.user = user;
-  next();
+async function listUsers() {
+  const result = await q(`SELECT username FROM users ORDER BY username ASC`);
+  return result.rows.map((r) => r.username);
 }
 
-function listUsers() {
-  return db.prepare(`SELECT username FROM users ORDER BY username ASC`).all().map((r) => r.username);
+async function getCompanyByName(company) {
+  const result = await q(
+    `SELECT * FROM companies WHERE name_key = $1`,
+    [companyKey(company)]
+  );
+  return result.rows[0] || null;
 }
 
-function getCompanyByName(company) {
-  return db.prepare(`SELECT * FROM companies WHERE name_key = ?`).get(companyKey(company));
-}
-
-function buildSnapshot(me) {
-  const users = listUsers();
-  const companiesRows = db.prepare(`
-    SELECT
-      c.id,
-      c.name,
-      c.domain,
-      c.applied,
-      c.cleanup_done,
-      ad.username AS added_by,
-      lap.username AS latest_applier
-    FROM companies c
-    JOIN users ad ON ad.id = c.added_by_user_id
-    LEFT JOIN users lap ON lap.id = c.latest_applier_user_id
-    ORDER BY c.name COLLATE NOCASE ASC
-  `).all();
-
-  const namesRows = db.prepare(`
-    SELECT cn.company_id, cn.name
-    FROM company_names cn
-    JOIN companies c ON c.id = cn.company_id
-    ORDER BY c.name COLLATE NOCASE ASC, cn.name COLLATE NOCASE ASC
-  `).all();
-
-  const emailsRows = db.prepare(`
-    SELECT ge.company_id, ge.email, ge.format_key
-    FROM generated_emails ge
-    JOIN companies c ON c.id = ge.company_id
-    ORDER BY c.name COLLATE NOCASE ASC, ge.email COLLATE NOCASE ASC
-  `).all();
-
-  const logRows = db.prepare(`
-    SELECT c.name AS company, a.date_key AS dateKey, a.timestamp, a.action, u.username
-    FROM application_log a
-    JOIN companies c ON c.id = a.company_id
-    JOIN users u ON u.id = a.user_id
-    ORDER BY a.timestamp DESC
-  `).all();
+async function buildSnapshot(me) {
+  const [users, companiesRes, namesRes, emailsRes, logRes, version] = await Promise.all([
+    listUsers(),
+    q(`
+      SELECT
+        c.id,
+        c.name,
+        c.domain,
+        c.applied,
+        c.cleanup_done,
+        ad.username AS added_by,
+        lap.username AS latest_applier
+      FROM companies c
+      JOIN users ad ON ad.id = c.added_by_user_id
+      LEFT JOIN users lap ON lap.id = c.latest_applier_user_id
+      ORDER BY c.name ASC
+    `),
+    q(`
+      SELECT cn.company_id, cn.name
+      FROM company_names cn
+      JOIN companies c ON c.id = cn.company_id
+      ORDER BY c.name ASC, cn.name ASC
+    `),
+    q(`
+      SELECT ge.company_id, ge.email, ge.format_key
+      FROM generated_emails ge
+      JOIN companies c ON c.id = ge.company_id
+      ORDER BY c.name ASC, ge.email ASC
+    `),
+    q(`
+      SELECT c.name AS company, a.date_key AS "dateKey", a.timestamp, a.action, u.username
+      FROM application_log a
+      JOIN companies c ON c.id = a.company_id
+      JOIN users u ON u.id = a.user_id
+      ORDER BY a.timestamp DESC
+    `),
+    getDataVersion()
+  ]);
 
   const companyMap = {};
-  companiesRows.forEach((row) => {
+  companiesRes.rows.forEach((row) => {
     companyMap[row.id] = {
       company: row.name,
       names: [],
       domain: row.domain,
       addedBy: row.added_by,
-      applied: row.applied === 1,
+      applied: row.applied === true,
       latestApplier: row.latest_applier || null,
-      cleanupDone: row.cleanup_done === 1,
+      cleanupDone: row.cleanup_done === true,
       generatedEmails: [],
       generatedEmailsByFormat: {}
     };
   });
 
-  namesRows.forEach((row) => {
+  namesRes.rows.forEach((row) => {
     const item = companyMap[row.company_id];
     if (item) {
       item.names.push(row.name);
     }
   });
 
-  emailsRows.forEach((row) => {
+  emailsRes.rows.forEach((row) => {
     const item = companyMap[row.company_id];
     if (!item) {
       return;
@@ -293,315 +294,589 @@ function buildSnapshot(me) {
   });
 
   return {
-    version: getDataVersion(),
+    version,
     me: { username: me.username },
     users,
     companies: Object.values(companyMap),
-    applicationLog: logRows
+    applicationLog: logRes.rows
   };
 }
 
-function mountRoutes() {
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true });
-  });
-
-  app.get('/api/auth/status', (_req, res) => {
-    const row = db.prepare('SELECT COUNT(*) AS count FROM users').get();
-    res.json({ hasUsers: Number(row.count) > 0 });
-  });
-
-  app.post('/api/auth/register-first', (req, res) => {
-    const count = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-    if (Number(count) > 0) {
-      res.status(409).json({ error: 'First user already exists' });
+async function authRequired(req, res, next) {
+  try {
+    const auth = String(req.headers.authorization || "");
+    if (!auth.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Missing auth token" });
       return;
     }
-
-    const username = normalizeUsername(req.body.username);
-    const password = String(req.body.password || '');
-    if (!username || password.length < 4) {
-      res.status(400).json({ error: 'Username and password (min 4 chars) required' });
+    const token = auth.slice(7).trim();
+    const user = await getSessionUser(token);
+    if (!user) {
+      res.status(401).json({ error: "Invalid auth token" });
       return;
     }
+    req.token = token;
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
 
-    const ts = nowIso();
-    const result = db.prepare(`
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch((error) => {
+      res.status(500).json({ error: error.message });
+    });
+  };
+}
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/status", asyncRoute(async (_req, res) => {
+  const result = await q(`SELECT COUNT(*)::bigint AS count FROM users`);
+  res.json({ hasUsers: Number(result.rows[0].count) > 0 });
+}));
+
+app.post("/api/auth/register-first", asyncRoute(async (req, res) => {
+  const countRes = await q(`SELECT COUNT(*)::bigint AS count FROM users`);
+  if (Number(countRes.rows[0].count) > 0) {
+    res.status(409).json({ error: "First user already exists" });
+    return;
+  }
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || "");
+  if (!username || password.length < 4) {
+    res.status(400).json({ error: "Username and password (min 4 chars) required" });
+    return;
+  }
+  const ts = nowIso();
+  const insert = await q(
+    `
       INSERT INTO users(username, password_hash, created_at, updated_at)
-      VALUES(?, ?, ?, ?)
-    `).run(username, hashPassword(password), ts, ts);
+      VALUES($1, $2, $3, $4)
+      RETURNING id
+    `,
+    [username, hashPassword(password), ts, ts]
+  );
+  const token = await createSession(insert.rows[0].id);
+  res.json({ token, username });
+}));
 
-    const token = createSession(result.lastInsertRowid);
-    res.json({ token, username });
-  });
+app.post("/api/auth/login", asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || "");
+  const result = await q(
+    `SELECT id, username, password_hash FROM users WHERE username = $1`,
+    [username]
+  );
+  const row = result.rows[0];
+  if (!row || !verifyPassword(password, row.password_hash)) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+  const token = await createSession(row.id);
+  res.json({ token, username: row.username });
+}));
 
-  app.post('/api/auth/login', (req, res) => {
-    const username = normalizeUsername(req.body.username);
-    const password = String(req.body.password || '');
-    const row = db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?').get(username);
-    if (!row || !verifyPassword(password, row.password_hash)) {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
-    }
-    const token = createSession(row.id);
-    res.json({ token, username: row.username });
-  });
-
-  app.post('/api/auth/register', (req, res) => {
-    const username = normalizeUsername(req.body.username);
-    const password = String(req.body.password || '');
-    if (!username || password.length < 4) {
-      res.status(400).json({ error: 'Username and password (min 4 chars) required' });
-      return;
-    }
-
-    const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    if (exists) {
-      res.status(409).json({ error: 'Username already exists' });
-      return;
-    }
-
-    const ts = nowIso();
-    const result = db.prepare(`
+app.post("/api/auth/register", asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || "");
+  if (!username || password.length < 4) {
+    res.status(400).json({ error: "Username and password (min 4 chars) required" });
+    return;
+  }
+  const exists = await q(`SELECT id FROM users WHERE username = $1`, [username]);
+  if (exists.rows[0]) {
+    res.status(409).json({ error: "Username already exists" });
+    return;
+  }
+  const ts = nowIso();
+  const insert = await q(
+    `
       INSERT INTO users(username, password_hash, created_at, updated_at)
-      VALUES(?, ?, ?, ?)
-    `).run(username, hashPassword(password), ts, ts);
-    bumpDataVersion();
-    const token = createSession(result.lastInsertRowid);
-    res.json({ token, username });
-  });
+      VALUES($1, $2, $3, $4)
+      RETURNING id
+    `,
+    [username, hashPassword(password), ts, ts]
+  );
+  await bumpDataVersion();
+  const token = await createSession(insert.rows[0].id);
+  res.json({ token, username });
+}));
 
-  app.post('/api/auth/logout', authRequired, (req, res) => {
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(req.token);
-    res.json({ ok: true });
-  });
+app.post("/api/auth/logout", authRequired, asyncRoute(async (req, res) => {
+  await q(`DELETE FROM sessions WHERE token = $1`, [req.token]);
+  res.json({ ok: true });
+}));
 
-  app.get('/api/auth/me', authRequired, (req, res) => {
-    res.json({ username: req.user.username });
-  });
+app.get("/api/auth/me", authRequired, asyncRoute(async (req, res) => {
+  res.json({ username: req.user.username });
+}));
 
-  app.post('/api/users', authRequired, (req, res) => {
-    const username = normalizeUsername(req.body.username);
-    const password = String(req.body.password || '');
-    if (!username || password.length < 4) {
-      res.status(400).json({ error: 'Username and password (min 4 chars) required' });
-      return;
-    }
+app.post("/api/users", authRequired, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || "");
+  if (!username || password.length < 4) {
+    res.status(400).json({ error: "Username and password (min 4 chars) required" });
+    return;
+  }
+  const exists = await q(`SELECT id FROM users WHERE username = $1`, [username]);
+  if (exists.rows[0]) {
+    res.status(409).json({ error: "Username already exists" });
+    return;
+  }
+  const ts = nowIso();
+  await q(
+    `INSERT INTO users(username, password_hash, created_at, updated_at) VALUES($1, $2, $3, $4)`,
+    [username, hashPassword(password), ts, ts]
+  );
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
 
-    const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    if (exists) {
-      res.status(409).json({ error: 'Username already exists' });
-      return;
-    }
+app.patch("/api/users/me", authRequired, asyncRoute(async (req, res) => {
+  const nextUsername = normalizeUsername(req.body.username);
+  if (!nextUsername) {
+    res.status(400).json({ error: "Username required" });
+    return;
+  }
+  const conflict = await q(
+    `SELECT id FROM users WHERE username = $1 AND id <> $2`,
+    [nextUsername, req.user.id]
+  );
+  if (conflict.rows[0]) {
+    res.status(409).json({ error: "Username already exists" });
+    return;
+  }
+  await q(`UPDATE users SET username = $1, updated_at = $2 WHERE id = $3`, [nextUsername, nowIso(), req.user.id]);
+  await bumpDataVersion();
+  res.json({ ok: true, username: nextUsername });
+}));
 
-    const ts = nowIso();
-    db.prepare(`
-      INSERT INTO users(username, password_hash, created_at, updated_at)
-      VALUES(?, ?, ?, ?)
-    `).run(username, hashPassword(password), ts, ts);
-    bumpDataVersion();
-    res.json({ ok: true });
-  });
+app.get("/api/snapshot", authRequired, asyncRoute(async (req, res) => {
+  res.json(await buildSnapshot(req.user));
+}));
 
-  app.patch('/api/users/me', authRequired, (req, res) => {
-    const nextUsername = normalizeUsername(req.body.username);
-    if (!nextUsername) {
-      res.status(400).json({ error: 'Username required' });
-      return;
-    }
+app.post("/api/companies/upsert-names", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const names = Array.isArray(req.body.names) ? req.body.names.map(normalizeName).filter(Boolean) : [];
+  const domain = normalizeDomain(req.body.domain);
+  if (!companyName || names.length === 0) {
+    res.status(400).json({ error: "Company and at least one name required" });
+    return;
+  }
 
-    const conflict = db.prepare('SELECT id FROM users WHERE username = ? AND id <> ?').get(nextUsername, req.user.id);
-    if (conflict) {
-      res.status(409).json({ error: 'Username already exists' });
-      return;
-    }
-
-    db.prepare('UPDATE users SET username = ?, updated_at = ? WHERE id = ?').run(nextUsername, nowIso(), req.user.id);
-    bumpDataVersion();
-    res.json({ ok: true, username: nextUsername });
-  });
-
-  app.get('/api/snapshot', authRequired, (req, res) => {
-    res.json(buildSnapshot(req.user));
-  });
-
-  app.post('/api/migrate/legacy', authRequired, (req, res) => {
-    const body = req.body && typeof req.body === "object" ? req.body : {};
-    const companiesRaw = body.companies && typeof body.companies === "object" ? body.companies : {};
-    const generatedEmailsRaw = body.generatedEmails && typeof body.generatedEmails === "object" ? body.generatedEmails : {};
-    const generatedEmailsByFormatRaw = body.generatedEmailsByFormat && typeof body.generatedEmailsByFormat === "object"
-      ? body.generatedEmailsByFormat
-      : {};
-    const appliedRaw = body.appliedCompanies && typeof body.appliedCompanies === "object" ? body.appliedCompanies : {};
-    const appliedNamesRaw = body.appliedNames && typeof body.appliedNames === "object" ? body.appliedNames : {};
-    const cleanupRaw = body.cleanupCompanies && typeof body.cleanupCompanies === "object" ? body.cleanupCompanies : {};
-    const domainsRaw = body.companyDomains && typeof body.companyDomains === "object" ? body.companyDomains : {};
-    const logRaw = Array.isArray(body.applicationLog) ? body.applicationLog : [];
-
-    let touched = false;
-    let migratedCompanies = 0;
-    let migratedNames = 0;
-    let migratedEmails = 0;
-    let migratedLogEvents = 0;
-
-    const upsertCompany = (companyName, fallbackDomain = "software") => {
-      let company = getCompanyByName(companyName);
-      if (!company) {
-        const ts = nowIso();
-        const result = db.prepare(`
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let companyRes = await client.query(`SELECT * FROM companies WHERE name_key = $1`, [companyKey(companyName)]);
+    let company = companyRes.rows[0];
+    if (!company) {
+      const ts = nowIso();
+      const insert = await client.query(
+        `
           INSERT INTO companies(name, name_key, domain, added_by_user_id, applied, cleanup_done, created_at, updated_at)
-          VALUES(?, ?, ?, ?, 0, 0, ?, ?)
-        `).run(companyName, companyKey(companyName), normalizeDomain(fallbackDomain), req.user.id, ts, ts);
-        company = db.prepare("SELECT * FROM companies WHERE id = ?").get(result.lastInsertRowid);
-        touched = true;
-        migratedCompanies += 1;
+          VALUES($1, $2, $3, $4, FALSE, FALSE, $5, $6)
+          RETURNING *
+        `,
+        [companyName, companyKey(companyName), domain, req.user.id, ts, ts]
+      );
+      company = insert.rows[0];
+    }
+
+    for (const name of names) {
+      await client.query(
+        `
+          INSERT INTO company_names(company_id, name, name_key)
+          VALUES($1, $2, $3)
+          ON CONFLICT (company_id, name_key) DO NOTHING
+        `,
+        [company.id, name, nameKey(name)]
+      );
+    }
+
+    await client.query(`UPDATE companies SET updated_at = $1 WHERE id = $2`, [nowIso(), company.id]);
+    await bumpDataVersion(client);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post("/api/companies/rename", authRequired, asyncRoute(async (req, res) => {
+  const oldName = normalizeCompany(req.body.oldName);
+  const newName = normalizeCompany(req.body.newName);
+  if (!oldName || !newName || oldName.toLowerCase() === newName.toLowerCase()) {
+    res.status(400).json({ error: "Valid old and new names required" });
+    return;
+  }
+  const oldCompany = await getCompanyByName(oldName);
+  if (!oldCompany) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  const existing = await getCompanyByName(newName);
+  if (existing && existing.id !== oldCompany.id) {
+    res.status(409).json({ error: "Target company already exists" });
+    return;
+  }
+  await q(`UPDATE companies SET name = $1, name_key = $2, updated_at = $3 WHERE id = $4`, [
+    newName,
+    companyKey(newName),
+    nowIso(),
+    oldCompany.id
+  ]);
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
+
+app.post("/api/companies/domain", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const domain = normalizeDomain(req.body.domain);
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  await q(`UPDATE companies SET domain = $1, updated_at = $2 WHERE id = $3`, [domain, nowIso(), company.id]);
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
+
+app.post("/api/companies/applied", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  if (company.applied === true) {
+    res.json({ ok: true, alreadyApplied: true });
+    return;
+  }
+  const ts = nowIso();
+  await q(
+    `UPDATE companies SET applied = TRUE, latest_applier_user_id = $1, updated_at = $2 WHERE id = $3`,
+    [req.user.id, ts, company.id]
+  );
+  await q(
+    `
+      INSERT INTO application_log(company_id, user_id, timestamp, date_key, action)
+      VALUES($1, $2, $3, $4, 'applied')
+    `,
+    [company.id, req.user.id, ts, todayKey()]
+  );
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
+
+app.post("/api/companies/cleanup", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const cleanupDone = req.body.cleanupDone === true;
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  await q(`UPDATE companies SET cleanup_done = $1, updated_at = $2 WHERE id = $3`, [cleanupDone, nowIso(), company.id]);
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
+
+app.post("/api/companies/emails", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const emails = Array.isArray(req.body.emails) ? req.body.emails.map(normalizeEmail).filter(Boolean) : [];
+  const formatKey = String(req.body.format || "").trim();
+  if (!companyName || emails.length === 0) {
+    res.status(400).json({ error: "Company and emails required" });
+    return;
+  }
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const email of emails) {
+      await client.query(
+        `
+          INSERT INTO generated_emails(company_id, email, email_key, format_key)
+          VALUES($1, $2, $3, $4)
+          ON CONFLICT (company_id, email_key, format_key) DO NOTHING
+        `,
+        [company.id, email, emailKey(email), formatKey]
+      );
+      if (formatKey) {
+        await client.query(
+          `
+            INSERT INTO generated_emails(company_id, email, email_key, format_key)
+            VALUES($1, $2, $3, '')
+            ON CONFLICT (company_id, email_key, format_key) DO NOTHING
+          `,
+          [company.id, email, emailKey(email)]
+        );
       }
-      return company;
-    };
+    }
+    await client.query(`UPDATE companies SET updated_at = $1 WHERE id = $2`, [nowIso(), company.id]);
+    await bumpDataVersion(client);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
 
-    const tx = db.transaction(() => {
-      Object.keys(companiesRaw).forEach((rawCompanyName) => {
-        const companyName = normalizeCompany(rawCompanyName);
-        if (!companyName) {
-          return;
+app.post("/api/companies/remove-invalid-emails", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const invalidEmails = Array.isArray(req.body.invalidEmails)
+    ? req.body.invalidEmails.map(emailKey).filter(Boolean)
+    : [];
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  if (!invalidEmails.length) {
+    res.json({ ok: true, removed: 0 });
+    return;
+  }
+  const result = await q(
+    `DELETE FROM generated_emails WHERE company_id = $1 AND email_key = ANY($2::text[])`,
+    [company.id, invalidEmails]
+  );
+  await q(`UPDATE companies SET updated_at = $1 WHERE id = $2`, [nowIso(), company.id]);
+  await bumpDataVersion();
+  res.json({ ok: true, removed: result.rowCount || 0 });
+}));
+
+app.delete("/api/companies/:companyName", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(decodeURIComponent(req.params.companyName));
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  await q(`DELETE FROM companies WHERE id = $1`, [company.id]);
+  await bumpDataVersion();
+  res.json({ ok: true });
+}));
+
+app.post("/api/migrate/legacy", authRequired, asyncRoute(async (req, res) => {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const companiesRaw = body.companies && typeof body.companies === "object" ? body.companies : {};
+  const generatedEmailsRaw = body.generatedEmails && typeof body.generatedEmails === "object" ? body.generatedEmails : {};
+  const generatedEmailsByFormatRaw = body.generatedEmailsByFormat && typeof body.generatedEmailsByFormat === "object"
+    ? body.generatedEmailsByFormat
+    : {};
+  const appliedRaw = body.appliedCompanies && typeof body.appliedCompanies === "object" ? body.appliedCompanies : {};
+  const appliedNamesRaw = body.appliedNames && typeof body.appliedNames === "object" ? body.appliedNames : {};
+  const cleanupRaw = body.cleanupCompanies && typeof body.cleanupCompanies === "object" ? body.cleanupCompanies : {};
+  const domainsRaw = body.companyDomains && typeof body.companyDomains === "object" ? body.companyDomains : {};
+  const logRaw = Array.isArray(body.applicationLog) ? body.applicationLog : [];
+
+  let touched = false;
+  let migratedCompanies = 0;
+  let migratedNames = 0;
+  let migratedEmails = 0;
+  let migratedLogEvents = 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    async function upsertCompany(companyName, fallbackDomain = "software") {
+      const found = await client.query(`SELECT * FROM companies WHERE name_key = $1`, [companyKey(companyName)]);
+      if (found.rows[0]) {
+        return found.rows[0];
+      }
+      const ts = nowIso();
+      const inserted = await client.query(
+        `
+          INSERT INTO companies(name, name_key, domain, added_by_user_id, applied, cleanup_done, created_at, updated_at)
+          VALUES($1, $2, $3, $4, FALSE, FALSE, $5, $6)
+          RETURNING *
+        `,
+        [companyName, companyKey(companyName), normalizeDomain(fallbackDomain), req.user.id, ts, ts]
+      );
+      touched = true;
+      migratedCompanies += 1;
+      return inserted.rows[0];
+    }
+
+    for (const rawCompanyName of Object.keys(companiesRaw)) {
+      const companyName = normalizeCompany(rawCompanyName);
+      if (!companyName) {
+        continue;
+      }
+      const names = Array.isArray(companiesRaw[rawCompanyName])
+        ? companiesRaw[rawCompanyName].map(normalizeName).filter(Boolean)
+        : [];
+      const domain = normalizeDomain(domainsRaw[rawCompanyName]);
+      const company = await upsertCompany(companyName, domain);
+
+      if (company.domain !== domain) {
+        await client.query(`UPDATE companies SET domain = $1, updated_at = $2 WHERE id = $3`, [domain, nowIso(), company.id]);
+        touched = true;
+      }
+
+      for (const name of names) {
+        const insertName = await client.query(
+          `
+            INSERT INTO company_names(company_id, name, name_key)
+            VALUES($1, $2, $3)
+            ON CONFLICT (company_id, name_key) DO NOTHING
+          `,
+          [company.id, name, nameKey(name)]
+        );
+        if ((insertName.rowCount || 0) > 0) {
+          touched = true;
+          migratedNames += 1;
         }
-        const names = Array.isArray(companiesRaw[rawCompanyName])
-          ? companiesRaw[rawCompanyName].map(normalizeName).filter(Boolean)
+      }
+
+      const appliedNamesSource = appliedNamesRaw[rawCompanyName];
+      const hasAnyLegacyApplied = appliedNamesSource && typeof appliedNamesSource === "object"
+        ? Object.values(appliedNamesSource).some((value) => value === true)
+        : false;
+      if ((appliedRaw[rawCompanyName] === true || hasAnyLegacyApplied) && company.applied !== true) {
+        await client.query(
+          `UPDATE companies SET applied = TRUE, latest_applier_user_id = $1, updated_at = $2 WHERE id = $3`,
+          [req.user.id, nowIso(), company.id]
+        );
+        touched = true;
+      }
+      if (cleanupRaw[rawCompanyName] === true && company.cleanup_done !== true) {
+        await client.query(`UPDATE companies SET cleanup_done = TRUE, updated_at = $1 WHERE id = $2`, [nowIso(), company.id]);
+        touched = true;
+      }
+    }
+
+    for (const rawCompanyName of Object.keys(generatedEmailsRaw)) {
+      const companyName = normalizeCompany(rawCompanyName);
+      if (!companyName) {
+        continue;
+      }
+      const company = await upsertCompany(companyName, normalizeDomain(domainsRaw[rawCompanyName]));
+      const emails = Array.isArray(generatedEmailsRaw[rawCompanyName])
+        ? generatedEmailsRaw[rawCompanyName].map(normalizeEmail).filter(Boolean)
+        : [];
+      for (const email of emails) {
+        const result = await client.query(
+          `
+            INSERT INTO generated_emails(company_id, email, email_key, format_key)
+            VALUES($1, $2, $3, '')
+            ON CONFLICT (company_id, email_key, format_key) DO NOTHING
+          `,
+          [company.id, email, emailKey(email)]
+        );
+        if ((result.rowCount || 0) > 0) {
+          touched = true;
+          migratedEmails += 1;
+        }
+      }
+    }
+
+    for (const rawCompanyName of Object.keys(generatedEmailsByFormatRaw)) {
+      const companyName = normalizeCompany(rawCompanyName);
+      if (!companyName) {
+        continue;
+      }
+      const company = await upsertCompany(companyName, normalizeDomain(domainsRaw[rawCompanyName]));
+      const byFormat = generatedEmailsByFormatRaw[rawCompanyName] && typeof generatedEmailsByFormatRaw[rawCompanyName] === "object"
+        ? generatedEmailsByFormatRaw[rawCompanyName]
+        : {};
+      for (const formatKeyRaw of Object.keys(byFormat)) {
+        const formatKey = String(formatKeyRaw || "").trim();
+        const emails = Array.isArray(byFormat[formatKeyRaw])
+          ? byFormat[formatKeyRaw].map(normalizeEmail).filter(Boolean)
           : [];
-        const domain = normalizeDomain(domainsRaw[rawCompanyName]);
-        const company = upsertCompany(companyName, domain);
-
-        if (company.domain !== domain) {
-          db.prepare("UPDATE companies SET domain = ?, updated_at = ? WHERE id = ?")
-            .run(domain, nowIso(), company.id);
-          touched = true;
-        }
-
-        names.forEach((name) => {
-          const result = db.prepare(`
-            INSERT OR IGNORE INTO company_names(company_id, name, name_key)
-            VALUES(?, ?, ?)
-          `).run(company.id, name, nameKey(name));
-          if (result.changes > 0) {
-            touched = true;
-            migratedNames += 1;
-          }
-        });
-
-        if (appliedRaw[rawCompanyName] === true && company.applied !== 1) {
-          db.prepare("UPDATE companies SET applied = 1, latest_applier_user_id = ?, updated_at = ? WHERE id = ?")
-            .run(req.user.id, nowIso(), company.id);
-          touched = true;
-        }
-        if (company.applied !== 1 && appliedNamesRaw[rawCompanyName] && typeof appliedNamesRaw[rawCompanyName] === "object") {
-          const hasAnyApplied = Object.values(appliedNamesRaw[rawCompanyName]).some((value) => value === true);
-          if (hasAnyApplied) {
-            db.prepare("UPDATE companies SET applied = 1, latest_applier_user_id = ?, updated_at = ? WHERE id = ?")
-              .run(req.user.id, nowIso(), company.id);
-            touched = true;
-          }
-        }
-        if (cleanupRaw[rawCompanyName] === true && company.cleanup_done !== 1) {
-          db.prepare("UPDATE companies SET cleanup_done = 1, updated_at = ? WHERE id = ?")
-            .run(nowIso(), company.id);
-          touched = true;
-        }
-      });
-
-      Object.keys(generatedEmailsRaw).forEach((rawCompanyName) => {
-        const companyName = normalizeCompany(rawCompanyName);
-        if (!companyName) {
-          return;
-        }
-        const company = upsertCompany(companyName, normalizeDomain(domainsRaw[rawCompanyName]));
-        const emails = Array.isArray(generatedEmailsRaw[rawCompanyName])
-          ? generatedEmailsRaw[rawCompanyName].map(normalizeEmail).filter(Boolean)
-          : [];
-        emails.forEach((email) => {
-          const result = db.prepare(`
-            INSERT OR IGNORE INTO generated_emails(company_id, email, email_key, format_key)
-            VALUES(?, ?, ?, '')
-          `).run(company.id, email, emailKey(email));
-          if (result.changes > 0) {
+        for (const email of emails) {
+          const result = await client.query(
+            `
+              INSERT INTO generated_emails(company_id, email, email_key, format_key)
+              VALUES($1, $2, $3, $4)
+              ON CONFLICT (company_id, email_key, format_key) DO NOTHING
+            `,
+            [company.id, email, emailKey(email), formatKey]
+          );
+          if ((result.rowCount || 0) > 0) {
             touched = true;
             migratedEmails += 1;
           }
-        });
-      });
-
-      Object.keys(generatedEmailsByFormatRaw).forEach((rawCompanyName) => {
-        const companyName = normalizeCompany(rawCompanyName);
-        if (!companyName) {
-          return;
+          await client.query(
+            `
+              INSERT INTO generated_emails(company_id, email, email_key, format_key)
+              VALUES($1, $2, $3, '')
+              ON CONFLICT (company_id, email_key, format_key) DO NOTHING
+            `,
+            [company.id, email, emailKey(email)]
+          );
         }
-        const company = upsertCompany(companyName, normalizeDomain(domainsRaw[rawCompanyName]));
-        const byFormat = generatedEmailsByFormatRaw[rawCompanyName] && typeof generatedEmailsByFormatRaw[rawCompanyName] === "object"
-          ? generatedEmailsByFormatRaw[rawCompanyName]
-          : {};
-        Object.keys(byFormat).forEach((formatKeyRaw) => {
-          const formatKey = String(formatKeyRaw || "").trim();
-          const emails = Array.isArray(byFormat[formatKeyRaw]) ? byFormat[formatKeyRaw].map(normalizeEmail).filter(Boolean) : [];
-          emails.forEach((email) => {
-            const result = db.prepare(`
-              INSERT OR IGNORE INTO generated_emails(company_id, email, email_key, format_key)
-              VALUES(?, ?, ?, ?)
-            `).run(company.id, email, emailKey(email), formatKey);
-            if (result.changes > 0) {
-              touched = true;
-              migratedEmails += 1;
-            }
-            db.prepare(`
-              INSERT OR IGNORE INTO generated_emails(company_id, email, email_key, format_key)
-              VALUES(?, ?, ?, '')
-            `).run(company.id, email, emailKey(email));
-          });
-        });
-      });
+      }
+    }
 
-      logRaw.forEach((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return;
-        }
-        const companyName = normalizeCompany(entry.company);
-        const action = String(entry.action || "").trim().toLowerCase();
-        if (!companyName || action !== "applied") {
-          return;
-        }
-        const company = upsertCompany(companyName, normalizeDomain(domainsRaw[companyName]));
-        const parsedTs = new Date(String(entry.timestamp || ""));
-        const timestamp = Number.isFinite(parsedTs.getTime()) ? parsedTs.toISOString() : nowIso();
-        const incomingDateKey = String(entry.dateKey || "").trim();
-        const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(incomingDateKey)
-          ? incomingDateKey
-          : timestamp.slice(0, 10);
+    for (const entry of logRaw) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const companyName = normalizeCompany(entry.company);
+      const action = String(entry.action || "").trim().toLowerCase();
+      if (!companyName || action !== "applied") {
+        continue;
+      }
+      const company = await upsertCompany(companyName, normalizeDomain(domainsRaw[companyName]));
+      const parsedTs = new Date(String(entry.timestamp || ""));
+      const timestamp = Number.isFinite(parsedTs.getTime()) ? parsedTs.toISOString() : nowIso();
+      const incomingDateKey = String(entry.dateKey || "").trim();
+      const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(incomingDateKey) ? incomingDateKey : timestamp.slice(0, 10);
 
-        const existing = db.prepare(`
+      const exists = await client.query(
+        `
           SELECT id
           FROM application_log
-          WHERE company_id = ? AND user_id = ? AND timestamp = ? AND action = 'applied'
-        `).get(company.id, req.user.id, timestamp);
-        if (existing) {
-          return;
-        }
-
-        db.prepare(`
-          INSERT INTO application_log(company_id, user_id, timestamp, date_key, action)
-          VALUES(?, ?, ?, ?, 'applied')
-        `).run(company.id, req.user.id, timestamp, dateKey);
-
-        db.prepare("UPDATE companies SET applied = 1, latest_applier_user_id = ?, updated_at = ? WHERE id = ?")
-          .run(req.user.id, nowIso(), company.id);
-
-        touched = true;
-        migratedLogEvents += 1;
-      });
-
-      if (touched) {
-        bumpDataVersion();
+          WHERE company_id = $1 AND user_id = $2 AND timestamp = $3 AND action = 'applied'
+          LIMIT 1
+        `,
+        [company.id, req.user.id, timestamp]
+      );
+      if (exists.rows[0]) {
+        continue;
       }
-    });
 
-    tx();
+      await client.query(
+        `
+          INSERT INTO application_log(company_id, user_id, timestamp, date_key, action)
+          VALUES($1, $2, $3, $4, 'applied')
+        `,
+        [company.id, req.user.id, timestamp, dateKey]
+      );
+
+      await client.query(
+        `UPDATE companies SET applied = TRUE, latest_applier_user_id = $1, updated_at = $2 WHERE id = $3`,
+        [req.user.id, nowIso(), company.id]
+      );
+      touched = true;
+      migratedLogEvents += 1;
+    }
+
+    if (touched) {
+      await bumpDataVersion(client);
+    }
+
+    await client.query("COMMIT");
     res.json({
       ok: true,
       touched,
@@ -610,193 +885,22 @@ function mountRoutes() {
       migratedEmails,
       migratedLogEvents
     });
-  });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
 
-  app.post('/api/companies/upsert-names', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const names = Array.isArray(req.body.names) ? req.body.names.map(normalizeName).filter(Boolean) : [];
-    const domain = normalizeDomain(req.body.domain);
-
-    if (!companyName || names.length === 0) {
-      res.status(400).json({ error: 'Company and at least one name required' });
-      return;
-    }
-
-    const tx = db.transaction(() => {
-      let company = getCompanyByName(companyName);
-      if (!company) {
-        const ts = nowIso();
-        const result = db.prepare(`
-          INSERT INTO companies(name, name_key, domain, added_by_user_id, applied, cleanup_done, created_at, updated_at)
-          VALUES(?, ?, ?, ?, 0, 0, ?, ?)
-        `).run(companyName, companyKey(companyName), domain, req.user.id, ts, ts);
-        company = db.prepare('SELECT * FROM companies WHERE id = ?').get(result.lastInsertRowid);
-      }
-
-      names.forEach((name) => {
-        db.prepare(`
-          INSERT OR IGNORE INTO company_names(company_id, name, name_key)
-          VALUES(?, ?, ?)
-        `).run(company.id, name, nameKey(name));
-      });
-
-      db.prepare('UPDATE companies SET updated_at = ? WHERE id = ?').run(nowIso(), company.id);
-      bumpDataVersion();
-    });
-
-    tx();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/rename', authRequired, (req, res) => {
-    const oldName = normalizeCompany(req.body.oldName);
-    const newName = normalizeCompany(req.body.newName);
-
-    if (!oldName || !newName || oldName.toLowerCase() === newName.toLowerCase()) {
-      res.status(400).json({ error: 'Valid old and new names required' });
-      return;
-    }
-
-    const oldCompany = getCompanyByName(oldName);
-    if (!oldCompany) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-
-    const existing = getCompanyByName(newName);
-    if (existing && existing.id !== oldCompany.id) {
-      res.status(409).json({ error: 'Target company already exists' });
-      return;
-    }
-
-    db.prepare('UPDATE companies SET name = ?, name_key = ?, updated_at = ? WHERE id = ?')
-      .run(newName, companyKey(newName), nowIso(), oldCompany.id);
-    bumpDataVersion();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/domain', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const domain = normalizeDomain(req.body.domain);
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    db.prepare('UPDATE companies SET domain = ?, updated_at = ? WHERE id = ?').run(domain, nowIso(), company.id);
-    bumpDataVersion();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/applied', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-
-    if (company.applied === 1) {
-      res.json({ ok: true, alreadyApplied: true });
-      return;
-    }
-
-    const ts = nowIso();
-    db.prepare('UPDATE companies SET applied = 1, latest_applier_user_id = ?, updated_at = ? WHERE id = ?')
-      .run(req.user.id, ts, company.id);
-    db.prepare(`
-      INSERT INTO application_log(company_id, user_id, timestamp, date_key, action)
-      VALUES(?, ?, ?, ?, 'applied')
-    `).run(company.id, req.user.id, ts, todayKey());
-    bumpDataVersion();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/cleanup', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const cleanupDone = req.body.cleanupDone === true;
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    db.prepare('UPDATE companies SET cleanup_done = ?, updated_at = ? WHERE id = ?')
-      .run(cleanupDone ? 1 : 0, nowIso(), company.id);
-    bumpDataVersion();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/emails', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const emails = Array.isArray(req.body.emails) ? req.body.emails.map(normalizeEmail).filter(Boolean) : [];
-    const formatKey = String(req.body.format || '').trim();
-
-    if (!companyName || emails.length === 0) {
-      res.status(400).json({ error: 'Company and emails required' });
-      return;
-    }
-
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-
-    const tx = db.transaction(() => {
-      emails.forEach((email) => {
-        db.prepare(`
-          INSERT OR IGNORE INTO generated_emails(company_id, email, email_key, format_key)
-          VALUES(?, ?, ?, ?)
-        `).run(company.id, email, emailKey(email), formatKey);
-        if (formatKey) {
-          db.prepare(`
-            INSERT OR IGNORE INTO generated_emails(company_id, email, email_key, format_key)
-            VALUES(?, ?, ?, '')
-          `).run(company.id, email, emailKey(email));
-        }
-      });
-      db.prepare('UPDATE companies SET updated_at = ? WHERE id = ?').run(nowIso(), company.id);
-      bumpDataVersion();
-    });
-
-    tx();
-    res.json({ ok: true });
-  });
-
-  app.post('/api/companies/remove-invalid-emails', authRequired, (req, res) => {
-    const companyName = normalizeCompany(req.body.company);
-    const invalidEmails = Array.isArray(req.body.invalidEmails)
-      ? req.body.invalidEmails.map(emailKey).filter(Boolean)
-      : [];
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    if (!invalidEmails.length) {
-      res.json({ ok: true, removed: 0 });
-      return;
-    }
-
-    const placeholders = invalidEmails.map(() => '?').join(',');
-    const result = db.prepare(`
-      DELETE FROM generated_emails
-      WHERE company_id = ? AND email_key IN (${placeholders})
-    `).run(company.id, ...invalidEmails);
-    db.prepare('UPDATE companies SET updated_at = ? WHERE id = ?').run(nowIso(), company.id);
-    bumpDataVersion();
-    res.json({ ok: true, removed: result.changes });
-  });
-
-  app.delete('/api/companies/:companyName', authRequired, (req, res) => {
-    const companyName = normalizeCompany(decodeURIComponent(req.params.companyName));
-    const company = getCompanyByName(companyName);
-    if (!company) {
-      res.status(404).json({ error: 'Company not found' });
-      return;
-    }
-    db.prepare('DELETE FROM companies WHERE id = ?').run(company.id);
-    bumpDataVersion();
-    res.json({ ok: true });
+async function start() {
+  await initSchema();
+  app.listen(PORT, () => {
+    console.log(`Shared backend running on http://localhost:${PORT}`);
   });
 }
+
+start().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

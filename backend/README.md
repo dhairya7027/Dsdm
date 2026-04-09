@@ -1,91 +1,64 @@
-# Shared Backend
+# Shared Backend (Supabase + Render Free)
 
-This backend provides shared DB-backed storage for the extension.
+This backend now uses **Postgres** via `DATABASE_URL` (Supabase).
 
-## Local Run
+No local SQLite disk is needed anymore.
 
-```bash
-cd backend
-npm install
-npm start
-```
+## 1. Create Supabase (dumb way)
 
-Server runs at:
+1. Go to Supabase and create a new project.
+2. Wait until project is ready.
+3. Open Project Settings -> Database.
+4. Copy the **Connection string (URI)**.
+5. Replace `[YOUR-PASSWORD]` in the URI with your DB password.
 
-`http://localhost:8787`
+Keep this value safe. This is your `DATABASE_URL`.
 
-Default DB file:
-
-`backend/shared.db`
-
-## Important Notes
-
-- First login creates the first account (`register-first` flow).
-- Other users can login or register.
-- All extension pages use this backend via `shared-api.js`.
-- Auth is username + password.
-- Legacy local extension data auto-migrates once per user on first sign-in per backend URL.
-- Keep DB file persistent. If DB is deleted/reset, data is gone.
-
-## Quick Answer For Multi-User
-
-Both users must use the same backend URL in Dashboard -> Backend panel.
-
-Default extension target:
-
-`http://localhost:8787/api`
-
-`localhost` is only your own machine. For real sharing, deploy backend to Render/Railway and use that public URL.
-
-## Render (Recommended)
-
-This repo includes `render.yaml`.
-
-### Setup (dumb/simple)
+## 2. Deploy backend on Render Free
 
 1. Push this repo to GitHub.
-2. In Render: New -> Blueprint -> select this repo.
-3. Render auto-detects `render.yaml` and creates service with a persistent disk.
-4. Wait until deploy is green.
-5. Open:
-   `https://<your-render-service>.onrender.com/api/health`
-6. Must return:
-   `{"ok":true}`
+2. In Render: New -> Web Service.
+3. Select your repo.
+4. Use:
+   - Runtime: `Node`
+   - Build Command: `cd backend && npm install`
+   - Start Command: `cd backend && npm start`
+5. Add env vars:
+   - `DATABASE_URL=<your-supabase-postgres-uri>`
+   - `NODE_ENV=production`
+6. Deploy.
 
-### Why this is safe
+No persistent disk needed.
 
-- DB path is set to `/var/data/shared.db`.
-- `/var/data` is a persistent disk (not wiped on deploy).
+## 3. Verify backend
 
-## Railway
+Open:
 
-This repo includes `railway.json`.
+`https://<your-render-service>.onrender.com/api/health`
 
-### Setup (dumb/simple)
+Expected:
 
-1. Push this repo to GitHub.
-2. In Railway: New Project -> Deploy from GitHub.
-3. Add environment variable:
-   - `DB_PATH=/data/shared.db`
-4. Add a persistent volume mounted at `/data`.
-5. Deploy.
-6. Open:
-   `https://<your-railway-domain>/api/health`
-7. Must return:
-   `{"ok":true}`
+`{"ok":true}`
 
-### Why this is safe
+## 4. Connect extension (both users)
 
-- DB writes to `/data/shared.db`.
-- `/data` is a persistent volume (survives restarts/deploys).
+In Dashboard -> Backend panel:
 
-## Zero Data Loss Rollout (Multiple Users)
+1. Set URL:
+   `https://<your-render-service>.onrender.com/api`
+2. Click `Test URL`
+3. Click `Save URL`
+4. Login/Register
 
-Do this in order.
+Both users must set the **exact same URL**.
 
-1. Both users take backup before updating extension:
-   - Dashboard -> `Export JSON Backup`
-   - Also raw local storage backup from DevTools console:
+## 5. No-data-loss rollout (multiple users)
+
+Do this order exactly:
+
+1. Both users backup old local data before updating extension:
+   - Dashboard -> Export JSON Backup
+   - DevTools Console:
 ```js
 chrome.storage.local.get(null, (data) => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -96,25 +69,23 @@ chrome.storage.local.get(null, (data) => {
   URL.revokeObjectURL(a.href);
 });
 ```
-2. Deploy backend to Render or Railway and verify `/api/health`.
-3. User A pulls latest extension, opens Dashboard, Backend panel:
-   - paste backend URL (`https://.../api`)
-   - click `Test URL`
-   - click `Save URL`
-   - login/register
-4. Wait for migration to complete (few seconds). Verify User A data appears.
-5. User B does same steps with the exact same backend URL.
-6. Verify both users can see shared data.
+2. Deploy backend (Render + Supabase).
+3. User A updates extension, sets backend URL, logs in.
+4. Wait a few seconds for auto migration.
+5. Verify User A data appears.
+6. User B repeats same steps.
+7. Verify User B data appears.
+8. Verify both see shared combined data.
 
 Migration behavior:
-- Old local data is copied into shared DB.
-- Local backup data is not deleted.
-- Migration runs once per user per backend URL.
 
-## Backups (Cloud DB file)
+- old local data is copied into shared DB once per user per backend URL
+- local old data is not deleted
 
-Even with persistence, keep manual backups:
+## 6. Local run (optional)
 
-- Render shell or Railway shell:
-  - copy DB file (`/var/data/shared.db` or `/data/shared.db`) periodically.
-- Keep timestamped copies before major updates.
+```bash
+cd backend
+npm install
+DATABASE_URL='your-supabase-uri' npm start
+```
