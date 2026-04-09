@@ -212,7 +212,12 @@
     try {
       const me = await request("/auth/me");
       currentUser = me;
-      await migrateLegacyDataIfNeeded(me.username);
+      try {
+        await migrateLegacyDataIfNeeded(me.username);
+      } catch (migrationError) {
+        console.error("Legacy migration failed:", migrationError);
+        alert(`Login succeeded, but legacy migration failed: ${migrationError.message}`);
+      }
       return me;
     } catch {
       // fallthrough to interactive sign in
@@ -244,7 +249,12 @@
       try {
         const me = await request("/auth/me");
         currentUser = me;
-        await migrateLegacyDataIfNeeded(me.username);
+        try {
+          await migrateLegacyDataIfNeeded(me.username);
+        } catch (migrationError) {
+          console.error("Legacy migration failed:", migrationError);
+          alert(`Login succeeded, but legacy migration failed: ${migrationError.message}`);
+        }
         return me;
       } catch (error) {
         alert(`Authentication failed: ${error.message}`);
