@@ -250,14 +250,38 @@ function renderUserStats() {
     return;
   }
   const appliedCounts = {};
+  const recentLogByCompany = {};
+
+  // Build a quick lookup from log for companies missing latestApplier.
   applicationLogState.forEach((entry) => {
     if (entry.action !== "applied") {
       return;
     }
+    const company = String(entry.company || "").trim();
     const username = String(entry.username || "").trim();
+    if (!company || !username || recentLogByCompany[company]) {
+      return;
+    }
+    recentLogByCompany[company] = username;
+  });
+
+  Object.keys(companiesState).forEach((company) => {
+    if (!isCompanyApplied(company)) {
+      return;
+    }
+
+    let username = String(companyLatestApplierState[company] || "").trim();
+    if (!username) {
+      username = String(recentLogByCompany[company] || "").trim();
+    }
+    // If there is only one user in this workspace, attribute missing values to that user.
+    if (!username && usersState.length === 1) {
+      username = usersState[0];
+    }
     if (!username) {
       return;
     }
+
     appliedCounts[username] = (appliedCounts[username] || 0) + 1;
   });
 
@@ -921,10 +945,14 @@ async function initDashboard() {
     event.target.value = "";
   });
 
-  document.getElementById("addUserBtn").addEventListener("click", () => handleAddUser().catch((e) => alert(e.message)));
-  document.getElementById("renameMeBtn").addEventListener("click", () => handleRenameMe().catch((e) => alert(e.message)));
-  document.getElementById("logoutBtn").addEventListener("click", () => handleLogout().catch((e) => alert(e.message)));
-  document.getElementById("currentUserBtn").addEventListener("click", () => alert(`Signed in as ${meUsername}`));
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => handleLogout().catch((e) => alert(e.message)));
+  }
+  const currentUserBtn = document.getElementById("currentUserBtn");
+  if (currentUserBtn) {
+    currentUserBtn.addEventListener("click", () => alert(`Signed in as ${meUsername}`));
+  }
 
   document.getElementById("emailGenBtn").addEventListener("click", () => {
     window.open(chrome.runtime.getURL("email-generator.html"));
