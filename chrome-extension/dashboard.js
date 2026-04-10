@@ -17,6 +17,7 @@ let selectedDomain = "software";
 let themeMode = "light";
 let snapshotVersion = 0;
 let pollTimer = null;
+const SNAPSHOT_CACHE_KEY = "dashboardSnapshotCache";
 
 const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
 const DOMAIN_LABELS = {
@@ -529,6 +530,7 @@ async function refreshSnapshot(force = false) {
     return;
   }
   applySnapshot(snapshot);
+  await chrome.storage.local.set({ [SNAPSHOT_CACHE_KEY]: snapshot });
 }
 
 async function handleCompanyAction(button) {
@@ -762,85 +764,29 @@ async function deleteSelected() {
   await refreshSnapshot(true);
 }
 
-async function handleAddUser() {
-  const username = prompt("New username (lowercase):");
-  if (!username) {
-    return;
-  }
-  const password = prompt("Password (min 4 chars):");
-  if (!password) {
-    return;
-  }
-  await SharedApi.addUser(username, password);
-  await refreshSnapshot(true);
-  alert(`User "${username.toLowerCase()}" added.`);
-}
-
-async function handleRenameMe() {
-  const username = prompt("Enter your new username:", meUsername);
-  if (!username || username.toLowerCase() === meUsername) {
-    return;
-  }
-  await SharedApi.renameMe(username);
-  await refreshSnapshot(true);
-}
-
 async function handleLogout() {
   await SharedApi.logout();
   location.reload();
 }
 
-function setBackendStatus(message, isError) {
-  const node = document.getElementById("backendStatus");
-  if (!node) {
+async function loadCachedSnapshotIfAvailable() {
+  const data = await chrome.storage.local.get([SNAPSHOT_CACHE_KEY]);
+  const snapshot = data[SNAPSHOT_CACHE_KEY];
+  if (!snapshot || typeof snapshot !== "object") {
     return;
   }
-  node.textContent = message;
-  node.style.color = isError ? "#e11d48" : "";
-}
-
-async function syncBackendUi() {
-  const base = await SharedApi.getApiBase();
-  const input = document.getElementById("apiBaseInput");
-  if (input && !input.value) {
-    input.value = base;
+  try {
+    applySnapshot(snapshot);
+  } catch (error) {
+    console.warn("Invalid cached snapshot, ignoring.", error);
   }
-  setBackendStatus(`Current backend: ${base}`, false);
-}
-
-async function handleTestBackendUrl() {
-  const input = document.getElementById("apiBaseInput");
-  const value = input ? input.value : "";
-  await SharedApi.testConnection(value);
-  setBackendStatus("Backend reachable.", false);
-}
-
-async function handleSaveBackendUrl() {
-  const input = document.getElementById("apiBaseInput");
-  const value = input ? input.value : "";
-  const normalized = await SharedApi.setApiBase(value);
-  if (input) {
-    input.value = normalized;
-  }
-  setBackendStatus(`Saved backend: ${normalized}`, false);
-  alert("Backend URL saved. You will be asked to login again.");
-  location.reload();
 }
 
 async function initDashboard() {
   const data = await chrome.storage.local.get(["themeMode"]);
   themeMode = data.themeMode === "dark" ? "dark" : "light";
   applyThemeMode();
-  await syncBackendUi();
-
-  document.getElementById("testBackendBtn").addEventListener("click", () => {
-    handleTestBackendUrl().catch((error) => setBackendStatus(`Backend test failed: ${error.message}`, true));
-  });
-  document.getElementById("saveBackendBtn").addEventListener("click", () => {
-    handleSaveBackendUrl().catch((error) => setBackendStatus(`Save failed: ${error.message}`, true));
-  });
-
-  await SharedApi.ensureSignedIn();
+  await loadCachedSnapshotIfAvailable();
   await refreshSnapshot(true);
 
   document.getElementById("searchInput").addEventListener("input", renderCompanies);

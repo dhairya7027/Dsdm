@@ -1,8 +1,7 @@
 (function () {
-  const DEFAULT_API_BASE = "http://localhost:8787/api";
+  const DEFAULT_API_BASE = "https://dsdm.onrender.com/api";
   const AUTH_TOKEN_KEY = "sharedAuthToken";
   const AUTH_USERNAME_KEY = "sharedAuthUsername";
-  const API_BASE_KEY = "sharedApiBaseUrl";
   const MIGRATION_KEY_PREFIX = "legacyMigratedFor_";
   let currentUser = null;
 
@@ -15,8 +14,7 @@
   }
 
   async function getApiBase() {
-    const data = await storageGet([API_BASE_KEY]);
-    return String(data[API_BASE_KEY] || DEFAULT_API_BASE).replace(/\/+$/, "");
+    return DEFAULT_API_BASE;
   }
 
   function normalizeApiBase(value) {
@@ -30,10 +28,8 @@
   }
 
   async function setApiBase(nextBase) {
-    const normalized = normalizeApiBase(nextBase);
-    await storageSet({ [API_BASE_KEY]: normalized });
-    await clearAuth();
-    return normalized;
+    // Backend URL is fixed for this extension build.
+    return DEFAULT_API_BASE;
   }
 
   async function getAuthToken() {
