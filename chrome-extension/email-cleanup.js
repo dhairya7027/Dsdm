@@ -1,5 +1,6 @@
 let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
+let companyCleanupState = {};
 let extractedInvalidEmails = [];
 
 function applyThemeMode(themeMode) {
@@ -31,12 +32,18 @@ function uniqueEmails(emails) {
 function getCompaniesWithStoredEmails() {
   const all = new Set();
   Object.keys(generatedEmailsState).forEach((company) => {
+    if (companyCleanupState[company] === true) {
+      return;
+    }
     const emails = generatedEmailsState[company];
     if (Array.isArray(emails) && emails.length > 0) {
       all.add(company);
     }
   });
   Object.keys(generatedEmailsByFormatState).forEach((company) => {
+    if (companyCleanupState[company] === true) {
+      return;
+    }
     const byFormat = generatedEmailsByFormatState[company] || {};
     const hasAny = Object.keys(byFormat).some((format) => {
       return Array.isArray(byFormat[format]) && byFormat[format].length > 0;
