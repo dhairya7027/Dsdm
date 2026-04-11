@@ -171,6 +171,17 @@ async function initSchema() {
     );
   `);
 
+  // Add indexes for performance
+  await q(`CREATE INDEX IF NOT EXISTS idx_companies_name_key ON companies(name_key)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_companies_added_by_user_id ON companies(added_by_user_id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_companies_applied ON companies(applied)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_company_names_company_id ON company_names(company_id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_generated_emails_company_id ON generated_emails(company_id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_application_log_company_id ON application_log(company_id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_application_log_user_id ON application_log(user_id)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_application_log_date_key ON application_log(date_key)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+
   await q(`
     INSERT INTO kv_meta(key, value)
     VALUES('data_version', '1')

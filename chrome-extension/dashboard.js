@@ -1002,6 +1002,11 @@ async function initDashboard() {
     const appliedCheck = event.target.closest("input[data-action='mark-company-applied']");
     if (appliedCheck) {
       await SharedApi.markCompanyApplied(appliedCheck.dataset.company, appliedCheck.checked);
+      if (appliedCheck.checked) {
+        appliedTab = "applied";
+      } else {
+        appliedTab = "not-applied";
+      }
       await refreshSnapshot(true);
       return;
     }
@@ -1082,7 +1087,7 @@ async function initDashboard() {
       return;
     }
     refreshSnapshot(false).catch(() => {});
-  }, 5000);
+  }, 10000);
 
   await bootstrapAuth();
 }
