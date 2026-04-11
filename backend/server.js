@@ -561,29 +561,40 @@ app.post("/api/companies/domain", authRequired, asyncRoute(async (req, res) => {
 
 app.post("/api/companies/applied", authRequired, asyncRoute(async (req, res) => {
   const companyName = normalizeCompany(req.body.company);
+  const shouldApply = req.body.applied !== false;
   const company = await getCompanyByName(companyName);
   if (!company) {
     res.status(404).json({ error: "Company not found" });
     return;
   }
-  if (company.applied === true) {
-    res.json({ ok: true, alreadyApplied: true });
+  if ((company.applied === true) === shouldApply) {
+    res.json({ ok: true, unchanged: true });
     return;
   }
+
   const ts = nowIso();
+  const action = shouldApply ? "applied" : "unapplied";
   await q(
-    `UPDATE companies SET applied = TRUE, latest_applier_user_id = $1, updated_at = $2 WHERE id = $3`,
-    [req.user.id, ts, company.id]
+    `
+      UPDATE companies
+      SET
+        applied = $1,
+        latest_applier_user_id = CASE WHEN $1 THEN $2 ELSE NULL END,
+        cleanup_done = CASE WHEN $1 THEN cleanup_done ELSE FALSE END,
+        updated_at = $3
+      WHERE id = $4
+    `,
+    [shouldApply, req.user.id, ts, company.id]
   );
   await q(
     `
       INSERT INTO application_log(company_id, user_id, timestamp, date_key, action)
-      VALUES($1, $2, $3, $4, 'applied')
+      VALUES($1, $2, $3, $4, $5)
     `,
-    [company.id, req.user.id, ts, todayKey()]
+    [company.id, req.user.id, ts, todayKey(), action]
   );
   await bumpDataVersion();
-  res.json({ ok: true });
+  res.json({ ok: true, applied: shouldApply });
 }));
 
 app.post("/api/companies/cleanup", authRequired, asyncRoute(async (req, res) => {
@@ -592,6 +603,10 @@ app.post("/api/companies/cleanup", authRequired, asyncRoute(async (req, res) => 
   const company = await getCompanyByName(companyName);
   if (!company) {
     res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  if (cleanupDone && company.applied !== true) {
+    res.status(400).json({ error: "Company must be applied before marking cleanup" });
     return;
   }
   await q(`UPDATE companies SET cleanup_done = $1, updated_at = $2 WHERE id = $3`, [cleanupDone, nowIso(), company.id]);

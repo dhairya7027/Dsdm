@@ -362,11 +362,11 @@
     });
   }
 
-  async function markCompanyApplied(company) {
+  async function markCompanyApplied(company, applied = true) {
     await ensureSignedIn();
     return request("/companies/applied", {
       method: "POST",
-      body: { company }
+      body: { company, applied: applied === true }
     });
   }
 

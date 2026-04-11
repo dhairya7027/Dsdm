@@ -88,12 +88,23 @@ function updateLastUpdated() {
 
 function computeDailyAppliedCount() {
   const today = getTodayKey();
-  const uniqueCompanies = new Set(
-    applicationLogState
-      .filter((entry) => entry.dateKey === today && entry.action === "applied")
-      .map((entry) => entry.company)
-  );
-  return uniqueCompanies.size;
+  const statusByCompany = new Map();
+  applicationLogState
+    .filter((entry) => entry.dateKey === today && (entry.action === "applied" || entry.action === "unapplied"))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .forEach((entry) => {
+      if (!entry.company) {
+        return;
+      }
+      statusByCompany.set(entry.company, entry.action === "applied");
+    });
+  let count = 0;
+  statusByCompany.forEach((isApplied) => {
+    if (isApplied) {
+      count += 1;
+    }
+  });
+  return count;
 }
 
 function updateStats() {
@@ -501,6 +512,7 @@ function renderCompanies() {
     cleanupCheckbox.dataset.action = "mark-company-cleanup";
     cleanupCheckbox.dataset.company = company;
     cleanupCheckbox.checked = isCompanyCleanupDone(company);
+    cleanupCheckbox.disabled = !isCompanyApplied(company);
     const cleanupText = document.createElement("span");
     cleanupText.textContent = "Cleanup";
     cleanupSelection.appendChild(cleanupCheckbox);
@@ -989,18 +1001,18 @@ async function initDashboard() {
 
     const appliedCheck = event.target.closest("input[data-action='mark-company-applied']");
     if (appliedCheck) {
-      if (!appliedCheck.checked) {
-        alert("Applied is one-way. Unapply is disabled.");
-        appliedCheck.checked = true;
-        return;
-      }
-      await SharedApi.markCompanyApplied(appliedCheck.dataset.company);
+      await SharedApi.markCompanyApplied(appliedCheck.dataset.company, appliedCheck.checked);
       await refreshSnapshot(true);
       return;
     }
 
     const cleanupCheck = event.target.closest("input[data-action='mark-company-cleanup']");
     if (cleanupCheck) {
+      if (!isCompanyApplied(cleanupCheck.dataset.company) && cleanupCheck.checked) {
+        cleanupCheck.checked = false;
+        alert("Mark company as applied first, then enable cleanup.");
+        return;
+      }
       await SharedApi.setCompanyCleanup(cleanupCheck.dataset.company, cleanupCheck.checked);
       await refreshSnapshot(true);
       return;
