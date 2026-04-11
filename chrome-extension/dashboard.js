@@ -114,6 +114,63 @@ function updateCurrentUserLabel() {
   }
 }
 
+function showAuthGate(subtitle) {
+  const authGate = document.getElementById("authGate");
+  const appShell = document.getElementById("appShell");
+  const authSubtitle = document.getElementById("authSubtitle");
+  if (authSubtitle && subtitle) {
+    authSubtitle.textContent = subtitle;
+  }
+  if (authGate) {
+    authGate.classList.remove("hidden");
+  }
+  if (appShell) {
+    appShell.classList.add("hidden");
+  }
+  setAuthError("");
+}
+
+function showAppShell() {
+  const authGate = document.getElementById("authGate");
+  const appShell = document.getElementById("appShell");
+  if (authGate) {
+    authGate.classList.add("hidden");
+  }
+  if (appShell) {
+    appShell.classList.remove("hidden");
+  }
+}
+
+function setAuthBusy(busy) {
+  const loginBtn = document.getElementById("authLoginBtn");
+  const registerBtn = document.getElementById("authRegisterBtn");
+  const username = document.getElementById("authUsername");
+  const password = document.getElementById("authPassword");
+  if (loginBtn) {
+    loginBtn.disabled = busy;
+    loginBtn.textContent = busy ? "Please wait..." : "Login";
+  }
+  if (registerBtn) {
+    registerBtn.disabled = busy;
+  }
+  if (username) {
+    username.disabled = busy;
+  }
+  if (password) {
+    password.disabled = busy;
+  }
+}
+
+function setAuthError(message) {
+  const node = document.getElementById("authError");
+  if (!node) {
+    return;
+  }
+  const text = String(message || "").trim();
+  node.textContent = text;
+  node.classList.toggle("hidden", !text);
+}
+
 function updateToggleAllNamesButton() {
   const button = document.getElementById("toggleAllNamesBtn");
   if (!button) {
@@ -766,7 +823,18 @@ async function deleteSelected() {
 
 async function handleLogout() {
   await SharedApi.logout();
-  location.reload();
+  meUsername = "";
+  updateCurrentUserLabel();
+  showAuthGate("Signed out. Please sign in to continue.");
+
+  try {
+    const status = await SharedApi.authStatus();
+    if (status && status.hasUsers === false) {
+      showAuthGate("Create the first account to continue.");
+    }
+  } catch {
+    showAuthGate("Cannot reach backend right now. Please try again.");
+  }
 }
 
 async function loadCachedSnapshotIfAvailable() {
@@ -782,12 +850,91 @@ async function loadCachedSnapshotIfAvailable() {
   }
 }
 
+async function enterDashboardForUser(me) {
+  meUsername = me && me.username ? me.username : "";
+  updateCurrentUserLabel();
+  showAppShell();
+  await loadCachedSnapshotIfAvailable();
+  await refreshSnapshot(true);
+}
+
+async function bootstrapAuth() {
+  setAuthError("");
+  try {
+    const me = await SharedApi.getMeIfSignedIn();
+    if (me && me.username) {
+      await enterDashboardForUser(me);
+      return;
+    }
+  } catch {
+    // continue to auth screen
+  }
+
+  try {
+    const status = await SharedApi.authStatus();
+    if (status && status.hasUsers === false) {
+      showAuthGate("Create the first account to continue.");
+    } else {
+      showAuthGate("Sign in to open your dashboard.");
+    }
+  } catch {
+    showAuthGate("Cannot reach backend right now. Check connection and try again.");
+  }
+}
+
+async function submitAuth(mode) {
+  const usernameInput = document.getElementById("authUsername");
+  const passwordInput = document.getElementById("authPassword");
+  const username = String((usernameInput && usernameInput.value) || "").trim().toLowerCase();
+  const password = String((passwordInput && passwordInput.value) || "");
+
+  if (!username || !password) {
+    setAuthError("Enter username and password.");
+    return;
+  }
+
+  setAuthBusy(true);
+  setAuthError("");
+  try {
+    const status = await SharedApi.authStatus();
+    let me;
+    if (status && status.hasUsers === false) {
+      me = await SharedApi.registerFirst(username, password);
+    } else if (mode === "register") {
+      me = await SharedApi.register(username, password);
+    } else {
+      me = await SharedApi.login(username, password);
+    }
+    if (passwordInput) {
+      passwordInput.value = "";
+    }
+    await enterDashboardForUser(me);
+  } catch (error) {
+    setAuthError(error.message || "Authentication failed.");
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
 async function initDashboard() {
   const data = await chrome.storage.local.get(["themeMode"]);
   themeMode = data.themeMode === "dark" ? "dark" : "light";
   applyThemeMode();
-  await loadCachedSnapshotIfAvailable();
-  await refreshSnapshot(true);
+  showAuthGate("Checking your session...");
+
+  const authForm = document.getElementById("authForm");
+  const authRegisterBtn = document.getElementById("authRegisterBtn");
+  if (authForm) {
+    authForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitAuth("login").catch((error) => setAuthError(error.message));
+    });
+  }
+  if (authRegisterBtn) {
+    authRegisterBtn.addEventListener("click", () => {
+      submitAuth("register").catch((error) => setAuthError(error.message));
+    });
+  }
 
   document.getElementById("searchInput").addEventListener("input", renderCompanies);
   document.getElementById("sortSelect").addEventListener("change", renderCompanies);
@@ -918,8 +1065,14 @@ async function initDashboard() {
   document.getElementById("themeToggleBtn").addEventListener("click", toggleThemeMode);
 
   pollTimer = setInterval(() => {
+    const appShell = document.getElementById("appShell");
+    if (!appShell || appShell.classList.contains("hidden")) {
+      return;
+    }
     refreshSnapshot(false).catch(() => {});
-  }, 3000);
+  }, 5000);
+
+  await bootstrapAuth();
 }
 
 initDashboard().catch((error) => {

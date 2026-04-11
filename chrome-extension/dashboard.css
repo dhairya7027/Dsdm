@@ -70,6 +70,7 @@ main {
   max-width: 1280px;
   margin: 24px auto 40px;
   padding: 0 18px 50px;
+  min-height: calc(100vh - 64px);
 }
 
 .top-nav {
@@ -100,6 +101,69 @@ body.dark-mode .top-nav {
   border: 1px solid var(--border);
   background: var(--shell);
   box-shadow: 0 16px 34px rgba(37, 99, 235, 0.12);
+}
+
+.auth-gate {
+  margin-top: 14px;
+  min-height: calc(100vh - 180px);
+  display: grid;
+  place-items: center;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--shell);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.12);
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.auth-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.auth-form {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.auth-form label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.auth-form input {
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 0 12px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+body.dark-mode .auth-form input {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.auth-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+}
+
+.auth-error {
+  margin: 4px 0 0;
+  color: #b91c1c;
+  font-size: 13px;
 }
 
 .side-menu {

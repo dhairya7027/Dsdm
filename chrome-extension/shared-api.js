@@ -38,6 +38,7 @@
   }
 
   async function setAuth(token, username) {
+    currentUser = username ? { username } : null;
     await storageSet({
       [AUTH_TOKEN_KEY]: token || "",
       [AUTH_USERNAME_KEY]: username || ""
@@ -153,6 +154,66 @@
       throw new Error(`Backend health check failed (${response.status})`);
     }
     return true;
+  }
+
+  async function authStatus() {
+    return request("/auth/status", { auth: false });
+  }
+
+  async function login(username, password) {
+    const result = await request("/auth/login", {
+      auth: false,
+      method: "POST",
+      body: {
+        username: String(username || "").trim().toLowerCase(),
+        password: String(password || "")
+      }
+    });
+    await setAuth(result.token, result.username);
+    currentUser = { username: result.username };
+    return currentUser;
+  }
+
+  async function register(username, password) {
+    const result = await request("/auth/register", {
+      auth: false,
+      method: "POST",
+      body: {
+        username: String(username || "").trim().toLowerCase(),
+        password: String(password || "")
+      }
+    });
+    await setAuth(result.token, result.username);
+    currentUser = { username: result.username };
+    return currentUser;
+  }
+
+  async function registerFirst(username, password) {
+    const result = await request("/auth/register-first", {
+      auth: false,
+      method: "POST",
+      body: {
+        username: String(username || "").trim().toLowerCase(),
+        password: String(password || "")
+      }
+    });
+    await setAuth(result.token, result.username);
+    currentUser = { username: result.username };
+    return currentUser;
+  }
+
+  async function getMeIfSignedIn() {
+    const token = await getAuthToken();
+    if (!token) {
+      return null;
+    }
+    try {
+      const me = await request("/auth/me");
+      currentUser = me;
+      return me;
+    } catch {
+      return null;
+    }
   }
 
   function promptForCredentials(titleText) {
@@ -344,6 +405,11 @@
     getApiBase,
     setApiBase,
     testConnection,
+    authStatus,
+    login,
+    register,
+    registerFirst,
+    getMeIfSignedIn,
     ensureSignedIn,
     logout,
     addUser,
