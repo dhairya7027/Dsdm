@@ -1019,6 +1019,7 @@ async function initDashboard() {
         return;
       }
       await SharedApi.setCompanyCleanup(cleanupCheck.dataset.company, cleanupCheck.checked);
+      await chrome.storage.local.set({ emailCleanupNeedsRefresh: Date.now() });
       await refreshSnapshot(true);
       return;
     }

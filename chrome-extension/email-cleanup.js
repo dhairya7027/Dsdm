@@ -7,6 +7,23 @@ function applyThemeMode(themeMode) {
   document.body.classList.toggle("dark-mode", themeMode === "dark");
 }
 
+async function refreshEmailCleanupData() {
+  const snapshot = await SharedApi.getSnapshot();
+  generatedEmailsState = {};
+  generatedEmailsByFormatState = {};
+  companyCleanupState = {};
+  (snapshot.companies || []).forEach((item) => {
+    const company = String(item.company || "").trim();
+    if (!company) {
+      return;
+    }
+    generatedEmailsState[company] = Array.isArray(item.generatedEmails) ? item.generatedEmails : [];
+    generatedEmailsByFormatState[company] = item.generatedEmailsByFormat || {};
+    companyCleanupState[company] = item.cleanupDone === true;
+  });
+  renderCompanyOptions();
+}
+
 function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
@@ -189,20 +206,9 @@ async function copyExtractedEmails() {
 
 async function init() {
   await SharedApi.ensureSignedIn();
-  const snapshot = await SharedApi.getSnapshot();
   const data = await chrome.storage.local.get(["themeMode"]);
-  generatedEmailsState = {};
-  generatedEmailsByFormatState = {};
-  (snapshot.companies || []).forEach((item) => {
-    const company = String(item.company || "").trim();
-    if (!company) {
-      return;
-    }
-    generatedEmailsState[company] = Array.isArray(item.generatedEmails) ? item.generatedEmails : [];
-    generatedEmailsByFormatState[company] = item.generatedEmailsByFormat || {};
-  });
+  await refreshEmailCleanupData();
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
-  renderCompanyOptions();
   updateCounts(0, 0, 0, 0);
 
   document.getElementById("parseBtn").addEventListener("click", parseInvalidEmailsFromInput);
@@ -211,6 +217,15 @@ async function init() {
   document.getElementById("backBtn").addEventListener("click", () => {
     const url = chrome.runtime.getURL("dashboard.html");
     window.location.href = url;
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") {
+      return;
+    }
+    if (changes.emailCleanupNeedsRefresh) {
+      refreshEmailCleanupData().catch(() => {});
+    }
   });
 }
 
