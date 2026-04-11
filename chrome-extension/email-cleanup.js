@@ -100,6 +100,12 @@ function extractInvalidEmails(text) {
     found.add(normalizeEmail(match[1]));
   }
 
+  // Pattern for "Your message to user@domain.com has been blocked"
+  const blockedPattern = /your message to\s+([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi;
+  while ((match = blockedPattern.exec(text)) !== null) {
+    found.add(normalizeEmail(match[1]));
+  }
+
   // Fallback for variants containing "Address not found ... to user@domain.com"
   const addressNotFoundPattern = /address not found[\s\S]{0,240}?to\s+([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi;
   while ((match = addressNotFoundPattern.exec(text)) !== null) {
