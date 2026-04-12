@@ -1032,12 +1032,18 @@ async function initDashboard() {
 
     const appliedCheck = event.target.closest("input[data-action='mark-company-applied']");
     if (appliedCheck) {
-      await SharedApi.markCompanyApplied(appliedCheck.dataset.company, appliedCheck.checked);
-      if (appliedCheck.checked) {
+      const company = appliedCheck.dataset.company;
+      const isApplied = appliedCheck.checked;
+      // Update local state immediately
+      appliedCompaniesState[company] = isApplied;
+      if (isApplied) {
+        susCompaniesState[company] = false;
         appliedTab = "applied";
       } else {
         appliedTab = "not-applied";
       }
+      renderCompanies();
+      await SharedApi.markCompanyApplied(company, isApplied);
       await refreshSnapshot(true);
       return;
     }
@@ -1049,7 +1055,12 @@ async function initDashboard() {
         alert("Mark company as applied first, then enable cleanup.");
         return;
       }
-      await SharedApi.setCompanyCleanup(cleanupCheck.dataset.company, cleanupCheck.checked);
+      const company = cleanupCheck.dataset.company;
+      const isCleanup = cleanupCheck.checked;
+      // Update local state immediately
+      cleanupCompaniesState[company] = isCleanup;
+      renderCompanies();
+      await SharedApi.setCompanyCleanup(company, isCleanup);
       await chrome.storage.local.set({ emailCleanupNeedsRefresh: Date.now() });
       await refreshSnapshot(true);
       return;
@@ -1057,12 +1068,19 @@ async function initDashboard() {
 
     const susCheck = event.target.closest("input[data-action='mark-company-sus']");
     if (susCheck) {
-      await SharedApi.setCompanySus(susCheck.dataset.company, susCheck.checked);
-      if (susCheck.checked) {
+      const company = susCheck.dataset.company;
+      const isSus = susCheck.checked;
+      // Update local state immediately for real-time UI
+      susCompaniesState[company] = isSus;
+      if (isSus) {
+        appliedCompaniesState[company] = false;
+        cleanupCompaniesState[company] = false;
         appliedTab = "sus";
       } else {
         appliedTab = "not-applied";
       }
+      renderCompanies();
+      await SharedApi.setCompanySus(company, isSus);
       await chrome.storage.local.set({ emailCleanupNeedsRefresh: Date.now() });
       await refreshSnapshot(true);
       return;
