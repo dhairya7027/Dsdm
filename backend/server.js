@@ -133,6 +133,9 @@ async function initSchema() {
     );
   `);
 
+  // Add sus column if it doesn't exist (for existing deployments)
+  await q(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS sus BOOLEAN NOT NULL DEFAULT FALSE`);
+
   await q(`
     CREATE TABLE IF NOT EXISTS company_names (
       id BIGSERIAL PRIMARY KEY,
