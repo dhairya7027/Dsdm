@@ -512,7 +512,7 @@ function renderCompanies() {
     appliedCheckbox.dataset.action = "mark-company-applied";
     appliedCheckbox.dataset.company = company;
     appliedCheckbox.checked = isCompanyApplied(company);
-    appliedCheckbox.disabled = isCompanySus(company);
+    appliedCheckbox.disabled = false;
     const appliedText = document.createElement("span");
     appliedText.textContent = "Applied";
     appliedSelection.appendChild(appliedCheckbox);
@@ -525,7 +525,7 @@ function renderCompanies() {
     cleanupCheckbox.dataset.action = "mark-company-cleanup";
     cleanupCheckbox.dataset.company = company;
     cleanupCheckbox.checked = isCompanyCleanupDone(company);
-    cleanupCheckbox.disabled = !isCompanyApplied(company) || isCompanySus(company);
+    cleanupCheckbox.disabled = !isCompanyApplied(company);
     const cleanupText = document.createElement("span");
     cleanupText.textContent = "Cleanup";
     cleanupSelection.appendChild(cleanupCheckbox);
@@ -1037,7 +1037,6 @@ async function initDashboard() {
       // Update local state immediately
       appliedCompaniesState[company] = isApplied;
       if (isApplied) {
-        susCompaniesState[company] = false;
         appliedTab = "applied";
       } else {
         appliedTab = "not-applied";
@@ -1073,11 +1072,9 @@ async function initDashboard() {
       // Update local state immediately for real-time UI
       susCompaniesState[company] = isSus;
       if (isSus) {
-        appliedCompaniesState[company] = false;
-        cleanupCompaniesState[company] = false;
         appliedTab = "sus";
       } else {
-        appliedTab = "not-applied";
+        appliedTab = appliedCompaniesState[company] ? "applied" : "not-applied";
       }
       renderCompanies();
       await SharedApi.setCompanySus(company, isSus);

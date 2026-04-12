@@ -596,7 +596,6 @@ app.post("/api/companies/applied", authRequired, asyncRoute(async (req, res) => 
       UPDATE companies
       SET
         applied = $1,
-        sus = CASE WHEN $1 THEN FALSE ELSE sus END,
         latest_applier_user_id = CASE WHEN $1 THEN $2 ELSE NULL END,
         cleanup_done = CASE WHEN $1 THEN cleanup_done ELSE FALSE END,
         updated_at = $3
@@ -651,8 +650,6 @@ app.post("/api/companies/sus", authRequired, asyncRoute(async (req, res) => {
       UPDATE companies
       SET
         sus = $1,
-        applied = CASE WHEN $1 THEN FALSE ELSE applied END,
-        cleanup_done = CASE WHEN $1 THEN FALSE ELSE cleanup_done END,
         updated_at = $2
       WHERE id = $3
     `,
