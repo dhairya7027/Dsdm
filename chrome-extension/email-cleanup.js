@@ -1,6 +1,7 @@
 let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
 let companyCleanupState = {};
+let companySusState = {};
 let extractedInvalidEmails = [];
 
 function applyThemeMode(themeMode) {
@@ -12,6 +13,7 @@ async function refreshEmailCleanupData() {
   generatedEmailsState = {};
   generatedEmailsByFormatState = {};
   companyCleanupState = {};
+  companySusState = {};
   (snapshot.companies || []).forEach((item) => {
     const company = String(item.company || "").trim();
     if (!company) {
@@ -20,6 +22,7 @@ async function refreshEmailCleanupData() {
     generatedEmailsState[company] = Array.isArray(item.generatedEmails) ? item.generatedEmails : [];
     generatedEmailsByFormatState[company] = item.generatedEmailsByFormat || {};
     companyCleanupState[company] = item.cleanupDone === true;
+    companySusState[company] = item.sus === true;
   });
   renderCompanyOptions();
 }
@@ -49,7 +52,7 @@ function uniqueEmails(emails) {
 function getCompaniesWithStoredEmails() {
   const all = new Set();
   Object.keys(generatedEmailsState).forEach((company) => {
-    if (companyCleanupState[company] === true) {
+    if (companyCleanupState[company] === true || companySusState[company] === true) {
       return;
     }
     const emails = generatedEmailsState[company];
@@ -58,7 +61,7 @@ function getCompaniesWithStoredEmails() {
     }
   });
   Object.keys(generatedEmailsByFormatState).forEach((company) => {
-    if (companyCleanupState[company] === true) {
+    if (companyCleanupState[company] === true || companySusState[company] === true) {
       return;
     }
     const byFormat = generatedEmailsByFormatState[company] || {};

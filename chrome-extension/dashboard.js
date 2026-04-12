@@ -4,6 +4,7 @@ let generatedEmailsByFormatState = {};
 let appliedCompaniesState = {};
 let companyDomainsState = {};
 let cleanupCompaniesState = {};
+let susCompaniesState = {};
 let companyAddedByState = {};
 let companyLatestApplierState = {};
 let applicationLogState = [];
@@ -238,18 +239,25 @@ function isCompanyCleanupDone(company) {
   return cleanupCompaniesState[company] === true;
 }
 
+function isCompanySus(company) {
+  return susCompaniesState[company] === true;
+}
+
 function getCompanyDomain(company) {
   return normalizeDomain(companyDomainsState[company]);
 }
 
 function filterByAppliedTab(entries) {
   if (appliedTab === "applied-cleanup") {
-    return entries.filter(([company]) => isCompanyApplied(company) && isCompanyCleanupDone(company));
+    return entries.filter(([company]) => isCompanyApplied(company) && isCompanyCleanupDone(company) && !isCompanySus(company));
   }
   if (appliedTab === "applied") {
-    return entries.filter(([company]) => isCompanyApplied(company) && !isCompanyCleanupDone(company));
+    return entries.filter(([company]) => isCompanyApplied(company) && !isCompanyCleanupDone(company) && !isCompanySus(company));
   }
-  return entries.filter(([company]) => !isCompanyApplied(company));
+  if (appliedTab === "sus") {
+    return entries.filter(([company]) => isCompanySus(company));
+  }
+  return entries.filter(([company]) => !isCompanyApplied(company) && !isCompanySus(company));
 }
 
 function filterByDomain(entries) {
@@ -272,19 +280,23 @@ function updateAppliedTabButtons() {
   const notAppliedButton = document.getElementById("notAppliedTabBtn");
   const appliedButton = document.getElementById("appliedTabBtn");
   const appliedCleanupButton = document.getElementById("appliedCleanupTabBtn");
-  if (!notAppliedButton || !appliedButton || !appliedCleanupButton) {
+  const susButton = document.getElementById("susTabBtn");
+  if (!notAppliedButton || !appliedButton || !appliedCleanupButton || !susButton) {
     return;
   }
   const domainCompanies = Object.keys(companiesState).filter((company) => getCompanyDomain(company) === selectedDomain);
-  const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company)).length;
-  const appliedCount = domainCompanies.filter((company) => isCompanyApplied(company) && !isCompanyCleanupDone(company)).length;
-  const appliedCleanupCount = domainCompanies.filter((company) => isCompanyApplied(company) && isCompanyCleanupDone(company)).length;
+  const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company) && !isCompanySus(company)).length;
+  const appliedCount = domainCompanies.filter((company) => isCompanyApplied(company) && !isCompanyCleanupDone(company) && !isCompanySus(company)).length;
+  const appliedCleanupCount = domainCompanies.filter((company) => isCompanyApplied(company) && isCompanyCleanupDone(company) && !isCompanySus(company)).length;
+  const susCount = domainCompanies.filter((company) => isCompanySus(company)).length;
   notAppliedButton.classList.toggle("active", appliedTab === "not-applied");
   appliedButton.classList.toggle("active", appliedTab === "applied");
   appliedCleanupButton.classList.toggle("active", appliedTab === "applied-cleanup");
+  susButton.classList.toggle("active", appliedTab === "sus");
   notAppliedButton.textContent = `Not Applied (${notAppliedCount})`;
   appliedButton.textContent = `Applied (${appliedCount})`;
   appliedCleanupButton.textContent = `Applied + Cleanup (${appliedCleanupCount})`;
+  susButton.textContent = `Sus (${susCount})`;
 }
 
 function createNamesContainer(names) {
@@ -500,6 +512,7 @@ function renderCompanies() {
     appliedCheckbox.dataset.action = "mark-company-applied";
     appliedCheckbox.dataset.company = company;
     appliedCheckbox.checked = isCompanyApplied(company);
+    appliedCheckbox.disabled = isCompanySus(company);
     const appliedText = document.createElement("span");
     appliedText.textContent = "Applied";
     appliedSelection.appendChild(appliedCheckbox);
@@ -512,11 +525,23 @@ function renderCompanies() {
     cleanupCheckbox.dataset.action = "mark-company-cleanup";
     cleanupCheckbox.dataset.company = company;
     cleanupCheckbox.checked = isCompanyCleanupDone(company);
-    cleanupCheckbox.disabled = !isCompanyApplied(company);
+    cleanupCheckbox.disabled = !isCompanyApplied(company) || isCompanySus(company);
     const cleanupText = document.createElement("span");
     cleanupText.textContent = "Cleanup";
     cleanupSelection.appendChild(cleanupCheckbox);
     cleanupSelection.appendChild(cleanupText);
+
+    const susSelection = document.createElement("label");
+    susSelection.className = "selection";
+    const susCheckbox = document.createElement("input");
+    susCheckbox.type = "checkbox";
+    susCheckbox.dataset.action = "mark-company-sus";
+    susCheckbox.dataset.company = company;
+    susCheckbox.checked = isCompanySus(company);
+    const susText = document.createElement("span");
+    susText.textContent = "Sus";
+    susSelection.appendChild(susCheckbox);
+    susSelection.appendChild(susText);
 
     const namesContainer = createNamesContainer(names);
     namesContainer.dataset.namesVisible = allNamesVisible ? "true" : "false";
@@ -530,6 +555,7 @@ function renderCompanies() {
     controls.appendChild(domainSelection);
     controls.appendChild(appliedSelection);
     controls.appendChild(cleanupSelection);
+    controls.appendChild(susSelection);
 
     card.appendChild(top);
     card.appendChild(controls);
@@ -550,6 +576,7 @@ function applySnapshot(snapshot) {
   const applied = {};
   const domains = {};
   const cleanup = {};
+  const sus = {};
   const addedBy = {};
   const latestApplier = {};
 
@@ -568,6 +595,9 @@ function applySnapshot(snapshot) {
     if (item.cleanupDone === true) {
       cleanup[company] = true;
     }
+    if (item.sus === true) {
+      sus[company] = true;
+    }
     addedBy[company] = item.addedBy || "-";
     latestApplier[company] = item.latestApplier || null;
   });
@@ -578,6 +608,7 @@ function applySnapshot(snapshot) {
   appliedCompaniesState = applied;
   companyDomainsState = domains;
   cleanupCompaniesState = cleanup;
+  susCompaniesState = sus;
   companyAddedByState = addedBy;
   companyLatestApplierState = latestApplier;
   usersState = Array.isArray(snapshot.users) ? snapshot.users : [];
@@ -1019,6 +1050,19 @@ async function initDashboard() {
         return;
       }
       await SharedApi.setCompanyCleanup(cleanupCheck.dataset.company, cleanupCheck.checked);
+      await chrome.storage.local.set({ emailCleanupNeedsRefresh: Date.now() });
+      await refreshSnapshot(true);
+      return;
+    }
+
+    const susCheck = event.target.closest("input[data-action='mark-company-sus']");
+    if (susCheck) {
+      await SharedApi.setCompanySus(susCheck.dataset.company, susCheck.checked);
+      if (susCheck.checked) {
+        appliedTab = "sus";
+      } else {
+        appliedTab = "not-applied";
+      }
       await chrome.storage.local.set({ emailCleanupNeedsRefresh: Date.now() });
       await refreshSnapshot(true);
       return;

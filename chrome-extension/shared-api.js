@@ -378,6 +378,14 @@
     });
   }
 
+  async function setCompanySus(company, sus) {
+    await ensureSignedIn();
+    return request("/companies/sus", {
+      method: "POST",
+      body: { company, sus: sus === true }
+    });
+  }
+
   async function saveCompanyEmails(company, emails, format) {
     await ensureSignedIn();
     return request("/companies/emails", {
@@ -420,6 +428,7 @@
     setCompanyDomain,
     markCompanyApplied,
     setCompanyCleanup,
+    setCompanySus,
     saveCompanyEmails,
     removeInvalidEmails,
     deleteCompany

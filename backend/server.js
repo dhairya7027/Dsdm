@@ -127,6 +127,7 @@ async function initSchema() {
       applied BOOLEAN NOT NULL DEFAULT FALSE,
       latest_applier_user_id BIGINT REFERENCES users(id),
       cleanup_done BOOLEAN NOT NULL DEFAULT FALSE,
+      sus BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL
     );
@@ -175,6 +176,7 @@ async function initSchema() {
   await q(`CREATE INDEX IF NOT EXISTS idx_companies_name_key ON companies(name_key)`);
   await q(`CREATE INDEX IF NOT EXISTS idx_companies_added_by_user_id ON companies(added_by_user_id)`);
   await q(`CREATE INDEX IF NOT EXISTS idx_companies_applied ON companies(applied)`);
+  await q(`CREATE INDEX IF NOT EXISTS idx_companies_sus ON companies(sus)`);
   await q(`CREATE INDEX IF NOT EXISTS idx_company_names_company_id ON company_names(company_id)`);
   await q(`CREATE INDEX IF NOT EXISTS idx_generated_emails_company_id ON generated_emails(company_id)`);
   await q(`CREATE INDEX IF NOT EXISTS idx_application_log_company_id ON application_log(company_id)`);
@@ -248,6 +250,7 @@ async function buildSnapshot(me) {
         c.domain,
         c.applied,
         c.cleanup_done,
+        c.sus,
         ad.username AS added_by,
         lap.username AS latest_applier
       FROM companies c
@@ -590,6 +593,7 @@ app.post("/api/companies/applied", authRequired, asyncRoute(async (req, res) => 
       UPDATE companies
       SET
         applied = $1,
+        sus = CASE WHEN $1 THEN FALSE ELSE sus END,
         latest_applier_user_id = CASE WHEN $1 THEN $2 ELSE NULL END,
         cleanup_done = CASE WHEN $1 THEN cleanup_done ELSE FALSE END,
         updated_at = $3
@@ -623,6 +627,36 @@ app.post("/api/companies/cleanup", authRequired, asyncRoute(async (req, res) => 
   await q(`UPDATE companies SET cleanup_done = $1, updated_at = $2 WHERE id = $3`, [cleanupDone, nowIso(), company.id]);
   await bumpDataVersion();
   res.json({ ok: true });
+}));
+
+app.post("/api/companies/sus", authRequired, asyncRoute(async (req, res) => {
+  const companyName = normalizeCompany(req.body.company);
+  const isSus = req.body.sus === true;
+  const company = await getCompanyByName(companyName);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
+  if (company.sus === isSus) {
+    res.json({ ok: true, unchanged: true });
+    return;
+  }
+
+  const ts = nowIso();
+  await q(
+    `
+      UPDATE companies
+      SET
+        sus = $1,
+        applied = CASE WHEN $1 THEN FALSE ELSE applied END,
+        cleanup_done = CASE WHEN $1 THEN FALSE ELSE cleanup_done END,
+        updated_at = $2
+      WHERE id = $3
+    `,
+    [isSus, ts, company.id]
+  );
+  await bumpDataVersion();
+  res.json({ ok: true, sus: isSus });
 }));
 
 app.post("/api/companies/emails", authRequired, asyncRoute(async (req, res) => {
