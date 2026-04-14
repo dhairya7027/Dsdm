@@ -3,6 +3,7 @@ let generatedEmailsState = {};
 let appliedCompaniesState = {};
 let companyDomainsState = {};
 let cleanupCompaniesState = {};
+let susCompaniesState = {};
 let applicationLogState = [];
 let selectedCompanies = new Set();
 let lastRendered = [];
@@ -84,6 +85,21 @@ function sanitizeCompanyDomains(raw, companies) {
 }
 
 function sanitizeCleanupCompanies(raw, companies) {
+  const cleaned = {};
+  if (!raw || typeof raw !== "object") {
+    return cleaned;
+  }
+
+  Object.keys(companies).forEach((company) => {
+    if (raw[company] === true) {
+      cleaned[company] = true;
+    }
+  });
+
+  return cleaned;
+}
+
+function sanitizeSusCompanies(raw, companies) {
   const cleaned = {};
   if (!raw || typeof raw !== "object") {
     return cleaned;
@@ -299,6 +315,22 @@ function pruneCleanupCompanies() {
   cleanupCompaniesState = sanitizeCleanupCompanies(cleanupCompaniesState, companiesState);
 }
 
+function isCompanySus(company) {
+  return susCompaniesState[company] === true;
+}
+
+function setCompanySus(company, sus) {
+  if (sus) {
+    susCompaniesState[company] = true;
+  } else {
+    delete susCompaniesState[company];
+  }
+}
+
+function pruneSusCompanies() {
+  susCompaniesState = sanitizeSusCompanies(susCompaniesState, companiesState);
+}
+
 function createNamesContainer(names) {
   const namesContainer = document.createElement("div");
   namesContainer.className = "names";
@@ -348,12 +380,15 @@ function setCardNamesVisibility(card, visible) {
 
 function filterByAppliedTab(entries) {
   if (appliedTab === "applied-cleanup") {
-    return entries.filter(([company]) => isCompanyApplied(company) && isCompanyCleanupDone(company));
+    return entries.filter(([company]) => isCompanyApplied(company) && isCompanyCleanupDone(company) && !isCompanySus(company));
   }
   if (appliedTab === "applied") {
-    return entries.filter(([company]) => isCompanyApplied(company) && !isCompanyCleanupDone(company));
+    return entries.filter(([company]) => isCompanyApplied(company) && !isCompanyCleanupDone(company) && !isCompanySus(company));
   }
-  return entries.filter(([company]) => !isCompanyApplied(company));
+  if (appliedTab === "sus") {
+    return entries.filter(([company]) => isCompanySus(company));
+  }
+  return entries.filter(([company]) => !isCompanyApplied(company) && !isCompanySus(company));
 }
 
 function filterByDomain(entries) {
@@ -376,26 +411,30 @@ function updateAppliedTabButtons() {
   const notAppliedButton = document.getElementById("notAppliedTabBtn");
   const appliedButton = document.getElementById("appliedTabBtn");
   const appliedCleanupButton = document.getElementById("appliedCleanupTabBtn");
-  if (!notAppliedButton || !appliedButton || !appliedCleanupButton) {
+  const susButton = document.getElementById("susTabBtn");
+  if (!notAppliedButton || !appliedButton || !appliedCleanupButton || !susButton) {
     return;
   }
 
   const domainCompanies = Object.keys(companiesState)
     .filter((company) => getCompanyDomain(company) === selectedDomain);
-  const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company)).length;
+  const notAppliedCount = domainCompanies.filter((company) => !isCompanyApplied(company) && !isCompanySus(company)).length;
   const appliedCount = domainCompanies.filter((company) => {
-    return isCompanyApplied(company) && !isCompanyCleanupDone(company);
+    return isCompanyApplied(company) && !isCompanyCleanupDone(company) && !isCompanySus(company);
   }).length;
   const appliedCleanupCount = domainCompanies.filter((company) => {
-    return isCompanyApplied(company) && isCompanyCleanupDone(company);
+    return isCompanyApplied(company) && isCompanyCleanupDone(company) && !isCompanySus(company);
   }).length;
+  const susCount = domainCompanies.filter((company) => isCompanySus(company)).length;
 
   notAppliedButton.classList.toggle("active", appliedTab === "not-applied");
   appliedButton.classList.toggle("active", appliedTab === "applied");
   appliedCleanupButton.classList.toggle("active", appliedTab === "applied-cleanup");
+  susButton.classList.toggle("active", appliedTab === "sus");
   notAppliedButton.textContent = `Not Applied (${notAppliedCount})`;
   appliedButton.textContent = `Applied (${appliedCount})`;
   appliedCleanupButton.textContent = `Applied + Cleanup (${appliedCleanupCount})`;
+  susButton.textContent = `Sus (${susCount})`;
 }
 
 function renderCompanies(companies) {
@@ -429,7 +468,9 @@ function renderCompanies(companies) {
           ? "No applied companies match your search."
           : (appliedTab === "applied-cleanup"
             ? "No applied and cleaned companies match your search."
-            : "No not-applied companies match your search.")));
+            : (appliedTab === "sus"
+              ? "No suspect companies match your search."
+              : "No not-applied companies match your search."))));
     dashboard.innerHTML = `<div class="empty">${message}</div>`;
     updateDomainTabButtons();
     updateAppliedTabButtons();
@@ -538,6 +579,18 @@ function renderCompanies(companies) {
     cleanupSelection.appendChild(cleanupCheckbox);
     cleanupSelection.appendChild(cleanupText);
 
+    const susSelection = document.createElement("label");
+    susSelection.className = "selection";
+    const susCheckbox = document.createElement("input");
+    susCheckbox.type = "checkbox";
+    susCheckbox.dataset.action = "mark-company-sus";
+    susCheckbox.dataset.company = company;
+    susCheckbox.checked = isCompanySus(company);
+    const susText = document.createElement("span");
+    susText.textContent = "Suspect";
+    susSelection.appendChild(susCheckbox);
+    susSelection.appendChild(susText);
+
     top.appendChild(titleWrap);
     top.appendChild(actions);
 
@@ -547,6 +600,7 @@ function renderCompanies(companies) {
     cardControls.appendChild(domainSelection);
     cardControls.appendChild(appliedSelection);
     cardControls.appendChild(cleanupSelection);
+    cardControls.appendChild(susSelection);
 
     const namesContainer = createNamesContainer(names);
     namesContainer.dataset.namesVisible = allNamesVisible ? "true" : "false";
@@ -574,6 +628,7 @@ async function persistCompanies() {
     appliedCompanies: appliedCompaniesState,
     companyDomains: companyDomainsState,
     cleanupCompanies: cleanupCompaniesState,
+    susCompanies: susCompaniesState,
     dailyAppliedStats,
     applicationLog: applicationLogState
   });
@@ -690,11 +745,17 @@ async function handleCompanyAction(targetButton) {
     } else {
       delete cleanupCompaniesState[newName];
     }
+    if (isCompanySus(company) || isCompanySus(newName)) {
+      susCompaniesState[newName] = true;
+    } else {
+      delete susCompaniesState[newName];
+    }
     companyDomainsState[newName] = getCompanyDomain(company);
     delete companiesState[company];
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
     delete cleanupCompaniesState[company];
+    delete susCompaniesState[company];
     delete companyDomainsState[company];
     if (selectedCompanies.has(company)) {
       selectedCompanies.delete(company);
@@ -716,6 +777,7 @@ async function handleCompanyAction(targetButton) {
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
     delete cleanupCompaniesState[company];
+    delete susCompaniesState[company];
     delete companyDomainsState[company];
     selectedCompanies.delete(company);
     await persistCompanies();
@@ -812,6 +874,7 @@ async function importJsonBackup(file) {
     pruneGeneratedEmails();
     pruneAppliedCompanies();
     pruneCleanupCompanies();
+    pruneSusCompanies();
     pruneCompanyDomains();
     selectedCompanies = new Set();
   } else {
@@ -819,6 +882,7 @@ async function importJsonBackup(file) {
     pruneGeneratedEmails();
     pruneAppliedCompanies();
     pruneCleanupCompanies();
+    pruneSusCompanies();
     pruneCompanyDomains();
   }
 
@@ -837,6 +901,7 @@ async function clearAllData() {
   generatedEmailsState = {};
   appliedCompaniesState = {};
   cleanupCompaniesState = {};
+  susCompaniesState = {};
   companyDomainsState = {};
   selectedCompanies = new Set();
   await persistCompanies();
@@ -879,6 +944,7 @@ async function deleteSelected() {
     delete generatedEmailsState[company];
     delete appliedCompaniesState[company];
     delete cleanupCompaniesState[company];
+    delete susCompaniesState[company];
     delete companyDomainsState[company];
   });
   selectedCompanies = new Set();
@@ -896,6 +962,7 @@ async function initDashboard() {
     "appliedNames",
     "cleanupCompanies",
     "companyDomains",
+    "susCompanies",
     "themeMode",
     "dailyAppliedStats",
     "applicationLog"
@@ -920,6 +987,7 @@ async function initDashboard() {
     companiesState
   );
   cleanupCompaniesState = sanitizeCleanupCompanies(data.cleanupCompanies || {}, companiesState);
+  susCompaniesState = sanitizeSusCompanies(data.susCompanies || {}, companiesState);
   companyDomainsState = sanitizeCompanyDomains(data.companyDomains || {}, companiesState);
   applicationLogState = sanitizeApplicationLog(data.applicationLog || []);
   themeMode = data.themeMode === "dark" ? "dark" : "light";
@@ -928,6 +996,7 @@ async function initDashboard() {
   pruneGeneratedEmails();
   pruneAppliedCompanies();
   pruneCleanupCompanies();
+  pruneSusCompanies();
   pruneCompanyDomains();
 
   if (
@@ -1041,6 +1110,18 @@ async function initDashboard() {
       const company = cleanupCheck.dataset.company;
       if (company) {
         setCompanyCleanupDone(company, cleanupCheck.checked);
+        await persistCompanies();
+        renderCompanies(companiesState);
+        updateLastUpdated();
+      }
+      return;
+    }
+
+    const susCheck = event.target.closest("input[data-action='mark-company-sus']");
+    if (susCheck) {
+      const company = susCheck.dataset.company;
+      if (company) {
+        setCompanySus(company, susCheck.checked);
         await persistCompanies();
         renderCompanies(companiesState);
         updateLastUpdated();
