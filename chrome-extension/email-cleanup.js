@@ -1,5 +1,6 @@
 let generatedEmailsState = {};
 let generatedEmailsByFormatState = {};
+let cleanupCompaniesState = {};
 let extractedInvalidEmails = [];
 
 function applyThemeMode(themeMode) {
@@ -45,7 +46,11 @@ function getCompaniesWithStoredEmails() {
       all.add(company);
     }
   });
-  return [...all].sort((a, b) => a.localeCompare(b));
+
+  // Filter out companies that already have cleanup marked as done
+  return [...all]
+    .filter((company) => cleanupCompaniesState[company] !== true)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function renderCompanyOptions() {
@@ -181,10 +186,12 @@ async function init() {
   const data = await chrome.storage.local.get([
     "generatedEmails",
     "generatedEmailsByFormat",
+    "cleanupCompanies",
     "themeMode"
   ]);
   generatedEmailsState = data.generatedEmails || {};
   generatedEmailsByFormatState = data.generatedEmailsByFormat || {};
+  cleanupCompaniesState = data.cleanupCompanies || {};
   applyThemeMode(data.themeMode === "dark" ? "dark" : "light");
   renderCompanyOptions();
   updateCounts(0, 0, 0, 0);

@@ -111,6 +111,7 @@ function sanitizeSusCompanies(raw, companies) {
     }
   });
 
+
   return cleaned;
 }
 
@@ -330,6 +331,7 @@ function setCompanySus(company, sus) {
 function pruneSusCompanies() {
   susCompaniesState = sanitizeSusCompanies(susCompaniesState, companiesState);
 }
+
 
 function createNamesContainer(names) {
   const namesContainer = document.createElement("div");
@@ -1167,6 +1169,7 @@ async function initDashboard() {
   });
   document.getElementById("exportSelectedBtn").addEventListener("click", exportSelectedCsv);
   document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelected);
+
 
   document.getElementById("exportJsonBtn").addEventListener("click", exportJsonBackup);
   document.getElementById("importJsonInput").addEventListener("change", async (event) => {
