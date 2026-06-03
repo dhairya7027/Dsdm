@@ -259,6 +259,7 @@ document.getElementById("companyName").addEventListener("blur", async () => {
 
 loadLastCompanyName();
 
+<<<<<<< Updated upstream
 (async () => {
   try {
     await SharedApi.ensureSignedIn();
@@ -266,3 +267,5 @@ loadLastCompanyName();
     alert(`Sign-in required: ${error.message}`);
   }
 })();
+=======
+>>>>>>> Stashed changes

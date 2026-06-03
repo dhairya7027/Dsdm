@@ -16,10 +16,15 @@ let allNamesVisible = false;
 let appliedTab = "not-applied";
 let selectedDomain = "software";
 let themeMode = "light";
+<<<<<<< Updated upstream
 let snapshotVersion = 0;
 let pollTimer = null;
 const SNAPSHOT_CACHE_KEY = "dashboardSnapshotCache";
 
+=======
+let dailyAppliedStats = { date: "", count: 0 };
+let companyCareersState = {};
+>>>>>>> Stashed changes
 const DOMAIN_ORDER = ["software", "quant", "marketing", "electrical"];
 const DOMAIN_LABELS = {
   software: "Software",
@@ -178,9 +183,144 @@ function setAuthError(message) {
   if (!node) {
     return;
   }
+<<<<<<< Updated upstream
   const text = String(message || "").trim();
   node.textContent = text;
   node.classList.toggle("hidden", !text);
+=======
+
+  if (sortValue === "names-desc") {
+    entries.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    return;
+  }
+
+  if (sortValue === "names-asc") {
+    entries.sort((a, b) => a[1].length - b[1].length || a[0].localeCompare(b[0]));
+    return;
+  }
+
+  entries.sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function filterEntries(entries, query) {
+  if (!query) {
+    return entries;
+  }
+
+  const lowered = query.toLowerCase();
+  return entries.filter(([company, names]) => {
+    if (company.toLowerCase().includes(lowered)) {
+      return true;
+    }
+    return names.some((name) => name.toLowerCase().includes(lowered));
+  });
+}
+
+function isCompanyApplied(company) {
+  return appliedCompaniesState[company] === true;
+}
+
+function setCompanyApplied(company, applied) {
+  if (applied) {
+    appliedCompaniesState[company] = true;
+  } else {
+    delete appliedCompaniesState[company];
+  }
+}
+
+function pruneAppliedCompanies() {
+  appliedCompaniesState = sanitizeAppliedCompanies(appliedCompaniesState, companiesState);
+}
+
+function pruneCompanyDomains() {
+  companyDomainsState = sanitizeCompanyDomains(companyDomainsState, companiesState);
+}
+
+async function loadCompanyCareers() {
+  const data = await chrome.storage.local.get("companyCareers");
+  companyCareersState = data.companyCareers || {};
+}
+
+async function saveCareerForCompany(company, url) {
+  if (!company) return;
+  if (url && String(url).trim()) {
+    companyCareersState[company] = String(url).trim();
+  } else {
+    delete companyCareersState[company];
+  }
+  await chrome.storage.local.set({ companyCareers: companyCareersState });
+}
+
+// Note: career panel UI removed; per-company career links are shown on each card.
+
+function getCompanyDomain(company) {
+  return normalizeDomain(companyDomainsState[company]);
+}
+
+function setCompanyDomain(company, domain) {
+  companyDomainsState[company] = normalizeDomain(domain);
+}
+
+function isCompanyCleanupDone(company) {
+  return cleanupCompaniesState[company] === true;
+}
+
+function setCompanyCleanupDone(company, done) {
+  if (done) {
+    cleanupCompaniesState[company] = true;
+  } else {
+    delete cleanupCompaniesState[company];
+  }
+}
+
+function pruneCleanupCompanies() {
+  cleanupCompaniesState = sanitizeCleanupCompanies(cleanupCompaniesState, companiesState);
+}
+
+function isCompanySus(company) {
+  return susCompaniesState[company] === true;
+}
+
+function setCompanySus(company, sus) {
+  if (sus) {
+    susCompaniesState[company] = true;
+  } else {
+    delete susCompaniesState[company];
+  }
+}
+
+function pruneSusCompanies() {
+  susCompaniesState = sanitizeSusCompanies(susCompaniesState, companiesState);
+}
+
+
+function createNamesContainer(names) {
+  const namesContainer = document.createElement("div");
+  namesContainer.className = "names";
+
+  names.forEach((name) => {
+    const pill = document.createElement("span");
+    pill.className = "name-pill";
+    pill.textContent = name;
+    namesContainer.appendChild(pill);
+  });
+
+  return namesContainer;
+}
+
+function normalizeEmails(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((email) => String(email).trim())
+    .filter((email) => email.length > 0);
+}
+
+function pruneGeneratedEmails() {
+  Object.keys(generatedEmailsState).forEach((company) => {
+    if (!companiesState[company]) {
+      delete generatedEmailsState[company];
+    }
+  });
+>>>>>>> Stashed changes
 }
 
 function updateToggleAllNamesButton() {
@@ -462,11 +602,24 @@ function renderCompanies() {
     titleWrap.appendChild(title);
     titleWrap.appendChild(ratioBadge);
     titleWrap.appendChild(meta);
+    // Show career link if available
+    const careerUrl = companyCareersState[company];
+    if (careerUrl) {
+      const careerAnchor = document.createElement("a");
+      careerAnchor.className = "career-link";
+      careerAnchor.href = careerUrl;
+      careerAnchor.target = "_blank";
+      careerAnchor.rel = "noopener noreferrer";
+      careerAnchor.textContent = "Career";
+      careerAnchor.style.marginLeft = "8px";
+      titleWrap.appendChild(careerAnchor);
+    }
 
     const actions = document.createElement("div");
     actions.className = "card-actions";
     actions.innerHTML = `
       <button class="mini-btn" data-action="toggle">Show Names</button>
+      <button class="mini-btn" data-action="edit-career">Career</button>
       <button class="mini-btn" data-action="copy">Copy</button>
       <button class="mini-btn" data-action="edit-names">Edit Names</button>
       <button class="mini-btn" data-action="copy-emails">Copy Emails</button>
@@ -543,6 +696,50 @@ function renderCompanies() {
     susSelection.appendChild(susCheckbox);
     susSelection.appendChild(susText);
 
+<<<<<<< Updated upstream
+=======
+    top.appendChild(titleWrap);
+    top.appendChild(actions);
+
+    const cardControls = document.createElement("div");
+    cardControls.className = "card-controls";
+    cardControls.appendChild(selection);
+    cardControls.appendChild(domainSelection);
+    cardControls.appendChild(appliedSelection);
+    cardControls.appendChild(cleanupSelection);
+    cardControls.appendChild(susSelection);
+
+    // Inline career editor (hidden by default)
+    const careerEditor = document.createElement("div");
+    careerEditor.className = "career-editor";
+    careerEditor.style.display = "none";
+    const careerInput = document.createElement("input");
+    careerInput.type = "url";
+    careerInput.className = "career-input";
+    careerInput.placeholder = "https://careers.example.com/jobs";
+    careerInput.value = companyCareersState[company] || "";
+    const saveCareerBtn = document.createElement("button");
+    saveCareerBtn.className = "mini-btn";
+    saveCareerBtn.dataset.action = "save-career";
+    saveCareerBtn.dataset.company = company;
+    saveCareerBtn.textContent = "Save";
+    const openCareerBtn = document.createElement("button");
+    openCareerBtn.className = "mini-btn";
+    openCareerBtn.dataset.action = "open-career";
+    openCareerBtn.dataset.company = company;
+    openCareerBtn.textContent = "Open";
+    const removeCareerBtn = document.createElement("button");
+    removeCareerBtn.className = "mini-btn";
+    removeCareerBtn.dataset.action = "remove-career";
+    removeCareerBtn.dataset.company = company;
+    removeCareerBtn.textContent = "Remove";
+    careerEditor.appendChild(careerInput);
+    careerEditor.appendChild(saveCareerBtn);
+    careerEditor.appendChild(openCareerBtn);
+    careerEditor.appendChild(removeCareerBtn);
+    cardControls.appendChild(careerEditor);
+
+>>>>>>> Stashed changes
     const namesContainer = createNamesContainer(names);
     namesContainer.dataset.namesVisible = allNamesVisible ? "true" : "false";
     namesContainer.classList.toggle("hidden", !allNamesVisible);
@@ -684,6 +881,46 @@ async function handleCompanyAction(button) {
     return;
   }
 
+  if (action === "edit-career") {
+    const editor = card.querySelector('.career-editor');
+    if (!editor) return;
+    const isVisible = editor.style.display !== 'none';
+    if (isVisible) {
+      editor.style.display = 'none';
+    } else {
+      const input = editor.querySelector('.career-input');
+      if (input) input.value = companyCareersState[company] || '';
+      editor.style.display = 'flex';
+      editor.querySelector('.career-input').focus();
+    }
+    return;
+  }
+
+  if (action === 'save-career') {
+    const editor = card.querySelector('.career-editor');
+    if (!editor) return;
+    const input = editor.querySelector('.career-input');
+    const url = input ? input.value.trim() : '';
+    await saveCareerForCompany(company, url);
+    renderCompanies(companiesState);
+    updateLastUpdated();
+    return;
+  }
+
+  if (action === 'open-career') {
+    const url = companyCareersState[company] || '';
+    if (!url) { alert('No career URL saved for this company.'); return; }
+    window.open(url, '_blank');
+    return;
+  }
+
+  if (action === 'remove-career') {
+    await saveCareerForCompany(company, '');
+    renderCompanies(companiesState);
+    updateLastUpdated();
+    return;
+  }
+
   if (action === "export") {
     const rows = ["Company,Name"];
     names.forEach((name) => rows.push(`${escapeCSV(company)},${escapeCSV(name)}`));
@@ -765,6 +1002,24 @@ function exportSelectedCsv() {
   downloadTextFile("selected-company-names.csv", rows.join("\n"), "text/csv");
 }
 
+function exportCareersCsv() {
+  const entries = Object.entries(companyCareersState)
+    .filter(([, url]) => String(url || "").trim())
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (!entries.length) {
+    alert("No saved career pages to export.");
+    return;
+  }
+
+  const rows = ["Company,Career Page URL"];
+  entries.forEach(([company, url]) => {
+    rows.push(`${escapeCSV(company)},${escapeCSV(url)}`);
+  });
+
+  downloadTextFile("company-career-pages.csv", rows.join("\n"), "text/csv");
+}
+
 function exportJsonBackup() {
   // Export the full extension storage so nothing is lost during migration/debug.
   chrome.storage.local.get(null, (fullStorage) => {
@@ -805,6 +1060,7 @@ async function importJsonBackup(file) {
     alert("No valid company data found in JSON.");
     return;
   }
+<<<<<<< Updated upstream
   for (const [company, names] of entries) {
     const normalized = normalizeNames(names);
     if (!company.trim() || !normalized.length) {
@@ -813,6 +1069,15 @@ async function importJsonBackup(file) {
     await SharedApi.upsertCompanyNames(company, normalized, "software");
   }
   await refreshSnapshot(true);
+=======
+
+  await persistCompanies();
+  updateStats(companiesState);
+  renderCompanies(companiesState);
+  updateLastUpdated();
+
+  // per-card career links are handled in card actions; no top-level career panel.
+>>>>>>> Stashed changes
 }
 
 async function clearAllData() {
@@ -979,8 +1244,25 @@ async function initDashboard() {
     });
   }
 
+<<<<<<< Updated upstream
   document.getElementById("searchInput").addEventListener("input", renderCompanies);
   document.getElementById("sortSelect").addEventListener("change", renderCompanies);
+=======
+  updateStats(companiesState);
+  applyThemeMode();
+  await loadCompanyCareers();
+  renderCompanies(companiesState);
+  updateLastUpdated();
+
+  document.getElementById("searchInput").addEventListener("input", () => {
+    renderCompanies(companiesState);
+  });
+
+  document.getElementById("sortSelect").addEventListener("change", () => {
+    renderCompanies(companiesState);
+  });
+
+>>>>>>> Stashed changes
   document.querySelectorAll("[data-domain-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextDomain = normalizeDomain(button.dataset.domainTab);
@@ -1104,7 +1386,14 @@ async function initDashboard() {
   document.getElementById("toggleAllNamesBtn").addEventListener("click", toggleAllNamesVisibility);
   document.getElementById("copySelectedBtn").addEventListener("click", () => copySelectedNames().catch(() => alert("Could not copy selected names.")));
   document.getElementById("exportSelectedBtn").addEventListener("click", exportSelectedCsv);
+<<<<<<< Updated upstream
   document.getElementById("deleteSelectedBtn").addEventListener("click", () => deleteSelected().catch((e) => alert(e.message)));
+=======
+  document.getElementById("exportCareersBtn").addEventListener("click", exportCareersCsv);
+  document.getElementById("deleteSelectedBtn").addEventListener("click", deleteSelected);
+
+
+>>>>>>> Stashed changes
   document.getElementById("exportJsonBtn").addEventListener("click", exportJsonBackup);
   document.getElementById("importJsonInput").addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
